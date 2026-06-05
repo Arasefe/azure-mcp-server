@@ -1,4 +1,5 @@
-import "dotenv/config";
+import dotenv from "dotenv";
+dotenv.config({ override: true });
 import { exec } from "child_process";
 import { promisify } from "util";
 import path from "path";
