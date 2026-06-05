@@ -617,15 +617,15 @@ Access directory audit logs and sign-in logs.
 
 #### 8.5.8 Communication Compliance
 
-| Tool Name                               | Endpoint                                      | Description                                     |
-| --------------------------------------- | --------------------------------------------- | ----------------------------------------------- |
-| `list_communication_compliance_policies` | POST `/list-communication-compliance-policies` | List Communication Compliance policies (beta)   |
+| Tool Name                                | Endpoint                                       | Description                                   |
+| ---------------------------------------- | ---------------------------------------------- | --------------------------------------------- |
+| `list_communication_compliance_policies` | POST `/list-communication-compliance-policies` | List Communication Compliance policies (beta) |
 
 **Required permissions:**
 
-| Permission                          | Type              |
-| ----------------------------------- | ----------------- |
-| `CommunicationCompliance.Read.All`  | Graph Application |
+| Permission                         | Type              |
+| ---------------------------------- | ----------------- |
+| `CommunicationCompliance.Read.All` | Graph Application |
 
 > **Note:** Uses the `/beta` endpoint. Full policy management (create/edit/delete) must be done in **compliance.microsoft.com**.
 
@@ -633,15 +633,15 @@ Access directory audit logs and sign-in logs.
 
 #### 8.5.9 Compliance Manager
 
-| Tool Name                    | Endpoint                          | Description                                          |
-| ---------------------------- | --------------------------------- | ---------------------------------------------------- |
-| `list_compliance_assessments` | POST `/list-compliance-assessments` | List Compliance Manager assessments (beta)           |
+| Tool Name                     | Endpoint                            | Description                                |
+| ----------------------------- | ----------------------------------- | ------------------------------------------ |
+| `list_compliance_assessments` | POST `/list-compliance-assessments` | List Compliance Manager assessments (beta) |
 
 **Required permissions:**
 
-| Permission                          | Type              |
-| ----------------------------------- | ----------------- |
-| `ComplianceManagement.Read.All`     | Graph Application |
+| Permission                      | Type              |
+| ------------------------------- | ----------------- |
+| `ComplianceManagement.Read.All` | Graph Application |
 
 > **Note:** Uses the `/beta` endpoint. Full Compliance Manager management is available at **compliance.microsoft.com**.
 
@@ -649,14 +649,14 @@ Access directory audit logs and sign-in logs.
 
 #### 8.5.10 Data Security and Posture Management (DSPM)
 
-| Tool Name          | Endpoint              | Description                                           |
-| ------------------ | --------------------- | ----------------------------------------------------- |
+| Tool Name           | Endpoint                  | Description                                              |
+| ------------------- | ------------------------- | -------------------------------------------------------- |
 | `get_dspm_insights` | POST `/get-dspm-insights` | Get sensitive data type summary and DSPM insights (beta) |
 
 **Required permissions:**
 
-| Permission                          | Type              |
-| ----------------------------------- | ----------------- |
+| Permission                             | Type              |
+| -------------------------------------- | ----------------- |
 | `InformationProtectionPolicy.Read.All` | Graph Application |
 
 > **Note:** Uses the `/beta` endpoint. Requires Microsoft Purview or Microsoft 365 E5 licensing.
@@ -802,11 +802,11 @@ node chat.js
 
 Type one of these phrases at the prompt:
 
-| Input phrase       | Tool invoked        |
-| ------------------ | ------------------- |
-| `list resource groups` | `list_resource_groups` |
-| `create user`      | `create_user` (hardcoded test values) |
-| `assign role`      | `assign_role` (hardcoded test values) |
+| Input phrase           | Tool invoked                          |
+| ---------------------- | ------------------------------------- |
+| `list resource groups` | `list_resource_groups`                |
+| `create user`          | `create_user` (hardcoded test values) |
+| `assign role`          | `assign_role` (hardcoded test values) |
 
 Anything else prints `Command not recognized`. This is a lightweight smoke-test tool — extend the `if/else` block in `chat.js` to add more commands.
 
@@ -833,16 +833,16 @@ curl -s -X POST http://localhost:3000/run-sentinel-kql-query \
 
 ## 12. Troubleshooting
 
-| Error                                 | Cause                            | Fix                                                                         |
-| ------------------------------------- | -------------------------------- | --------------------------------------------------------------------------- |
-| `tenantId and clientId are required`  | Env vars not loaded              | Check `.env` file exists; ensure `require("dotenv").config()` is first line |
-| `Cannot POST /endpoint`               | Server running old code          | Restart with `node server.js`                                               |
-| `Application is not authorized`       | Missing Graph permission         | Add permission in App registrations → Grant admin consent                   |
-| `AuthorizationFailed`                 | Missing Azure RBAC role          | Assign required role via CLI or Portal                                      |
-| `Workspace not onboarded to Sentinel` | Wrong workspace name             | Run `az resource list` to find correct name                                 |
-| Port 3000 already in use              | Old server process still running | Run `kill $(lsof -ti :3000)` — if this returns "not enough arguments", port is already free |
-| `Cannot find module 'dotenv'`         | Package not installed            | Run `npm install dotenv`                                                    |
-| `MODULE_NOT_FOUND` for `@azure/identity` | Corrupted install — `dist/` directory missing from package | Run `rm -rf node_modules/@azure/identity && npm install @azure/identity` |
+| Error                                    | Cause                                                      | Fix                                                                                         |
+| ---------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `tenantId and clientId are required`     | Env vars not loaded                                        | Check `.env` file exists; ensure `require("dotenv").config()` is first line                 |
+| `Cannot POST /endpoint`                  | Server running old code                                    | Restart with `node server.js`                                                               |
+| `Application is not authorized`          | Missing Graph permission                                   | Add permission in App registrations → Grant admin consent                                   |
+| `AuthorizationFailed`                    | Missing Azure RBAC role                                    | Assign required role via CLI or Portal                                                      |
+| `Workspace not onboarded to Sentinel`    | Wrong workspace name                                       | Run `az resource list` to find correct name                                                 |
+| Port 3000 already in use                 | Old server process still running                           | Run `kill $(lsof -ti :3000)` — if this returns "not enough arguments", port is already free |
+| `Cannot find module 'dotenv'`            | Package not installed                                      | Run `npm install dotenv`                                                                    |
+| `MODULE_NOT_FOUND` for `@azure/identity` | Corrupted install — `dist/` directory missing from package | Run `rm -rf node_modules/@azure/identity && npm install @azure/identity`                    |
 
 ---
 
@@ -886,8 +886,8 @@ Done. 20 created, 0 failed.
 
 ### Required permissions
 
-| Permission           | Type              | Purpose             |
-| -------------------- | ----------------- | ------------------- |
+| Permission           | Type              | Purpose               |
+| -------------------- | ----------------- | --------------------- |
 | `User.ReadWrite.All` | Graph Application | Create Entra ID users |
 
 > **Note:** `provision-users.js` uses `AZURE_CLIENT_SECRET` for authentication. The main `server.js` uses certificate-based auth (`cavalry-sp.combined.pem`). Make sure the same app registration has both a client secret and the certificate uploaded if you use both.
