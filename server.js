@@ -62,6 +62,18 @@ const tools = [
   { name: "list_noncompliant_devices", description: "List non-compliant Intune devices", inputSchema: { type: "object", properties: {} } },
   { name: "sync_intune_device", description: "Trigger a sync for an Intune managed device", inputSchema: { type: "object", properties: { deviceId: { type: "string" } }, required: ["deviceId"] } },
   { name: "list_intune_compliance_policies", description: "List Intune device compliance policies", inputSchema: { type: "object", properties: {} } },
+  { name: "get_intune_device", description: "Get full details of a specific Intune managed device", inputSchema: { type: "object", properties: { deviceId: { type: "string" } }, required: ["deviceId"] } },
+  { name: "retire_intune_device", description: "Retire (unenroll) an Intune managed device from MDM", inputSchema: { type: "object", properties: { deviceId: { type: "string" } }, required: ["deviceId"] } },
+  { name: "wipe_intune_device", description: "Remotely wipe an Intune managed device to factory reset", inputSchema: { type: "object", properties: { deviceId: { type: "string" }, keepEnrollmentData: { type: "boolean" }, keepUserData: { type: "boolean" } }, required: ["deviceId"] } },
+  { name: "reboot_intune_device", description: "Remotely reboot an Intune managed device", inputSchema: { type: "object", properties: { deviceId: { type: "string" } }, required: ["deviceId"] } },
+  { name: "list_intune_configuration_profiles", description: "List Intune device configuration profiles", inputSchema: { type: "object", properties: {} } },
+  { name: "list_intune_apps", description: "List Intune managed mobile apps (Win32, store, LOB)", inputSchema: { type: "object", properties: {} } },
+  { name: "list_intune_app_assignments", description: "List group assignments for a specific Intune app", inputSchema: { type: "object", properties: { appId: { type: "string" } }, required: ["appId"] } },
+  { name: "list_intune_autopilot_devices", description: "List Windows Autopilot registered device identities", inputSchema: { type: "object", properties: {} } },
+  { name: "list_intune_enrollment_configurations", description: "List Intune device enrollment configurations and restrictions", inputSchema: { type: "object", properties: {} } },
+  { name: "list_intune_scripts", description: "List Intune device management scripts (PowerShell / shell)", inputSchema: { type: "object", properties: {} } },
+  { name: "list_intune_remediation_scripts", description: "List Intune proactive remediation (device health) scripts", inputSchema: { type: "object", properties: {} } },
+  { name: "list_intune_managed_app_policies", description: "List Intune Mobile Application Management (MAM) app protection policies", inputSchema: { type: "object", properties: {} } },
   { name: "list_defender_alerts", description: "List Defender for Cloud security alerts", inputSchema: { type: "object", properties: {} } },
   { name: "get_secure_score", description: "Get the Defender for Cloud secure score", inputSchema: { type: "object", properties: {} } },
   { name: "list_defender_recommendations", description: "List Defender for Cloud security recommendations/assessments", inputSchema: { type: "object", properties: {} } },
@@ -71,6 +83,18 @@ const tools = [
   { name: "update_sentinel_incident", description: "Update a Sentinel incident (status, severity, classification)", inputSchema: { type: "object", properties: { incidentId: { type: "string" }, status: { type: "string" }, severity: { type: "string" }, classification: { type: "string" }, classificationComment: { type: "string" } }, required: ["incidentId"] } },
   { name: "list_sentinel_analytics_rules", description: "List Sentinel analytics (alert) rules", inputSchema: { type: "object", properties: {} } },
   { name: "run_sentinel_kql_query", description: "Run a KQL query against the Sentinel Log Analytics workspace", inputSchema: { type: "object", properties: { query: { type: "string" }, timespan: { type: "string", description: "ISO 8601 duration, e.g. P1D (default)" } }, required: ["query"] } },
+  { name: "list_sentinel_incident_comments", description: "List all comments on a Sentinel incident", inputSchema: { type: "object", properties: { incidentId: { type: "string" } }, required: ["incidentId"] } },
+  { name: "add_sentinel_incident_comment", description: "Add a comment to a Sentinel incident", inputSchema: { type: "object", properties: { incidentId: { type: "string" }, message: { type: "string" } }, required: ["incidentId", "message"] } },
+  { name: "list_sentinel_incident_alerts", description: "List alerts associated with a Sentinel incident", inputSchema: { type: "object", properties: { incidentId: { type: "string" } }, required: ["incidentId"] } },
+  { name: "list_sentinel_incident_entities", description: "List entities (users, IPs, hosts, URLs) found in a Sentinel incident", inputSchema: { type: "object", properties: { incidentId: { type: "string" } }, required: ["incidentId"] } },
+  { name: "list_sentinel_analytics_rule_templates", description: "List all built-in Sentinel analytics rule templates", inputSchema: { type: "object", properties: {} } },
+  { name: "list_sentinel_hunting_queries", description: "List Sentinel saved hunting queries", inputSchema: { type: "object", properties: {} } },
+  { name: "list_sentinel_bookmarks", description: "List Sentinel threat hunting bookmarks", inputSchema: { type: "object", properties: {} } },
+  { name: "list_sentinel_watchlists", description: "List Sentinel watchlists", inputSchema: { type: "object", properties: {} } },
+  { name: "list_sentinel_watchlist_items", description: "List items in a specific Sentinel watchlist", inputSchema: { type: "object", properties: { watchlistAlias: { type: "string" } }, required: ["watchlistAlias"] } },
+  { name: "list_sentinel_threat_indicators", description: "List Sentinel threat intelligence indicators", inputSchema: { type: "object", properties: {} } },
+  { name: "list_sentinel_data_connectors", description: "List Sentinel data connectors and their status", inputSchema: { type: "object", properties: {} } },
+  { name: "list_sentinel_automation_rules", description: "List Sentinel automation rules (SOAR playbook triggers)", inputSchema: { type: "object", properties: {} } },
   { name: "list_sensitivity_labels", description: "List Microsoft Purview sensitivity labels", inputSchema: { type: "object", properties: {} } },
   { name: "get_sensitivity_label", description: "Get a specific Purview sensitivity label by ID", inputSchema: { type: "object", properties: { labelId: { type: "string" } }, required: ["labelId"] } },
   { name: "list_sensitive_info_types", description: "List Purview sensitive information types", inputSchema: { type: "object", properties: {} } },
@@ -85,12 +109,16 @@ const tools = [
   { name: "get_ediscovery_case", description: "Get a specific Purview eDiscovery case", inputSchema: { type: "object", properties: { caseId: { type: "string" } }, required: ["caseId"] } },
   { name: "list_ediscovery_custodians", description: "List custodians in a Purview eDiscovery case", inputSchema: { type: "object", properties: { caseId: { type: "string" } }, required: ["caseId"] } },
   { name: "list_ediscovery_holds", description: "List legal holds in a Purview eDiscovery case", inputSchema: { type: "object", properties: { caseId: { type: "string" } }, required: ["caseId"] } },
+  { name: "list_ediscovery_searches", description: "List content searches within a Purview eDiscovery case", inputSchema: { type: "object", properties: { caseId: { type: "string" } }, required: ["caseId"] } },
+  { name: "list_ediscovery_review_sets", description: "List review sets in a Purview eDiscovery case", inputSchema: { type: "object", properties: { caseId: { type: "string" } }, required: ["caseId"] } },
   { name: "list_retention_labels", description: "List Purview retention labels", inputSchema: { type: "object", properties: {} } },
   { name: "list_retention_event_types", description: "List Purview retention event types", inputSchema: { type: "object", properties: {} } },
   { name: "list_audit_logs", description: "List Entra ID directory audit logs", inputSchema: { type: "object", properties: { filter: { type: "string", description: "OData filter string" }, top: { type: "number", description: "Max results (default 50)" } } } },
   { name: "list_signin_logs", description: "List Entra ID sign-in logs", inputSchema: { type: "object", properties: { filter: { type: "string", description: "OData filter string" }, top: { type: "number", description: "Max results (default 50)" } } } },
   { name: "list_communication_compliance_policies", description: "List Communication Compliance policies", inputSchema: { type: "object", properties: {} } },
   { name: "list_compliance_assessments", description: "List Compliance Manager assessments", inputSchema: { type: "object", properties: {} } },
+  { name: "get_compliance_assessment", description: "Get details of a specific Compliance Manager assessment", inputSchema: { type: "object", properties: { assessmentId: { type: "string" } }, required: ["assessmentId"] } },
+  { name: "list_compliance_improvement_actions", description: "List Compliance Manager improvement actions and their implementation status", inputSchema: { type: "object", properties: {} } },
   { name: "get_dspm_insights", description: "Get Purview DSPM sensitive types summary", inputSchema: { type: "object", properties: {} } },
 ];
 
@@ -227,6 +255,83 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         result = r.data.value;
         break;
       }
+      case "get_intune_device": {
+        const token = await getGraphToken();
+        const r = await axios.get(`https://graph.microsoft.com/v1.0/deviceManagement/managedDevices/${args.deviceId}`, { headers: { Authorization: `Bearer ${token}` } });
+        result = r.data;
+        break;
+      }
+      case "retire_intune_device": {
+        const token = await getGraphToken();
+        await axios.post(`https://graph.microsoft.com/v1.0/deviceManagement/managedDevices/${args.deviceId}/retire`, {}, { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } });
+        result = { message: "Device retire initiated", deviceId: args.deviceId };
+        break;
+      }
+      case "wipe_intune_device": {
+        const token = await getGraphToken();
+        await axios.post(`https://graph.microsoft.com/v1.0/deviceManagement/managedDevices/${args.deviceId}/wipe`, { keepEnrollmentData: args.keepEnrollmentData ?? false, keepUserData: args.keepUserData ?? false }, { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } });
+        result = { message: "Device wipe initiated", deviceId: args.deviceId };
+        break;
+      }
+      case "reboot_intune_device": {
+        const token = await getGraphToken();
+        await axios.post(`https://graph.microsoft.com/v1.0/deviceManagement/managedDevices/${args.deviceId}/rebootNow`, {}, { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } });
+        result = { message: "Device reboot initiated", deviceId: args.deviceId };
+        break;
+      }
+      case "list_intune_configuration_profiles": {
+        const token = await getGraphToken();
+        let profiles = [], url = "https://graph.microsoft.com/v1.0/deviceManagement/deviceConfigurations?$select=id,displayName,description,lastModifiedDateTime,createdDateTime";
+        while (url) { const r = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } }); profiles = profiles.concat(r.data.value); url = r.data["@odata.nextLink"] || null; }
+        result = profiles;
+        break;
+      }
+      case "list_intune_apps": {
+        const token = await getGraphToken();
+        let apps = [], url = "https://graph.microsoft.com/v1.0/deviceAppManagement/mobileApps?$select=id,displayName,publisher,appAvailability,createdDateTime,lastModifiedDateTime";
+        while (url) { const r = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } }); apps = apps.concat(r.data.value); url = r.data["@odata.nextLink"] || null; }
+        result = apps;
+        break;
+      }
+      case "list_intune_app_assignments": {
+        const token = await getGraphToken();
+        const r = await axios.get(`https://graph.microsoft.com/v1.0/deviceAppManagement/mobileApps/${args.appId}/assignments`, { headers: { Authorization: `Bearer ${token}` } });
+        result = r.data.value;
+        break;
+      }
+      case "list_intune_autopilot_devices": {
+        const token = await getGraphToken();
+        let devices = [], url = "https://graph.microsoft.com/v1.0/deviceManagement/windowsAutopilotDeviceIdentities?$select=id,serialNumber,model,manufacturer,enrollmentState,azureAdDeviceId";
+        while (url) { const r = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } }); devices = devices.concat(r.data.value); url = r.data["@odata.nextLink"] || null; }
+        result = devices;
+        break;
+      }
+      case "list_intune_enrollment_configurations": {
+        const token = await getGraphToken();
+        const r = await axios.get("https://graph.microsoft.com/v1.0/deviceManagement/deviceEnrollmentConfigurations?$select=id,displayName,description,priority,createdDateTime,lastModifiedDateTime", { headers: { Authorization: `Bearer ${token}` } });
+        result = r.data.value;
+        break;
+      }
+      case "list_intune_scripts": {
+        const token = await getGraphToken();
+        let scripts = [], url = "https://graph.microsoft.com/beta/deviceManagement/deviceManagementScripts?$select=id,displayName,description,runAsAccount,createdDateTime,lastModifiedDateTime";
+        while (url) { const r = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } }); scripts = scripts.concat(r.data.value); url = r.data["@odata.nextLink"] || null; }
+        result = scripts;
+        break;
+      }
+      case "list_intune_remediation_scripts": {
+        const token = await getGraphToken();
+        let scripts = [], url = "https://graph.microsoft.com/beta/deviceManagement/deviceHealthScripts?$select=id,displayName,description,publisher,runAsAccount,createdDateTime,lastModifiedDateTime";
+        while (url) { const r = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } }); scripts = scripts.concat(r.data.value); url = r.data["@odata.nextLink"] || null; }
+        result = scripts;
+        break;
+      }
+      case "list_intune_managed_app_policies": {
+        const token = await getGraphToken();
+        const r = await axios.get("https://graph.microsoft.com/v1.0/deviceAppManagement/managedAppPolicies?$select=id,displayName,description,createdDateTime,lastModifiedDateTime", { headers: { Authorization: `Bearer ${token}` } });
+        result = r.data.value;
+        break;
+      }
       case "list_defender_alerts": {
         const token = await getARMToken();
         const r = await axios.get(`https://management.azure.com/subscriptions/${subscriptionId}/providers/Microsoft.Security/alerts?api-version=2022-01-01`, { headers: { Authorization: `Bearer ${token}` } });
@@ -290,6 +395,96 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         result = r.data;
         break;
       }
+      case "list_sentinel_incident_comments": {
+        const token = await getARMToken();
+        const base = `https://management.azure.com/subscriptions/${subscriptionId}/resourceGroups/${sentinelResourceGroup}/providers/Microsoft.OperationalInsights/workspaces/${sentinelWorkspace}/providers/Microsoft.SecurityInsights`;
+        const r = await axios.get(`${base}/incidents/${args.incidentId}/comments?api-version=2023-02-01`, { headers: { Authorization: `Bearer ${token}` } });
+        result = r.data.value;
+        break;
+      }
+      case "add_sentinel_incident_comment": {
+        const token = await getARMToken();
+        const base = `https://management.azure.com/subscriptions/${subscriptionId}/resourceGroups/${sentinelResourceGroup}/providers/Microsoft.OperationalInsights/workspaces/${sentinelWorkspace}/providers/Microsoft.SecurityInsights`;
+        const commentId = `comment-${Date.now()}`;
+        const r = await axios.put(`${base}/incidents/${args.incidentId}/comments/${commentId}?api-version=2023-02-01`, { properties: { message: args.message } }, { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } });
+        result = { message: "Comment added", commentId: r.data.name, incidentId: args.incidentId };
+        break;
+      }
+      case "list_sentinel_incident_alerts": {
+        const token = await getARMToken();
+        const base = `https://management.azure.com/subscriptions/${subscriptionId}/resourceGroups/${sentinelResourceGroup}/providers/Microsoft.OperationalInsights/workspaces/${sentinelWorkspace}/providers/Microsoft.SecurityInsights`;
+        const r = await axios.post(`${base}/incidents/${args.incidentId}/alerts?api-version=2023-02-01`, {}, { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } });
+        result = r.data.value;
+        break;
+      }
+      case "list_sentinel_incident_entities": {
+        const token = await getARMToken();
+        const base = `https://management.azure.com/subscriptions/${subscriptionId}/resourceGroups/${sentinelResourceGroup}/providers/Microsoft.OperationalInsights/workspaces/${sentinelWorkspace}/providers/Microsoft.SecurityInsights`;
+        const r = await axios.post(`${base}/incidents/${args.incidentId}/entities?api-version=2023-02-01`, {}, { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } });
+        result = r.data;
+        break;
+      }
+      case "list_sentinel_analytics_rule_templates": {
+        const token = await getARMToken();
+        const base = `https://management.azure.com/subscriptions/${subscriptionId}/resourceGroups/${sentinelResourceGroup}/providers/Microsoft.OperationalInsights/workspaces/${sentinelWorkspace}/providers/Microsoft.SecurityInsights`;
+        let templates = [], url = `${base}/alertRuleTemplates?api-version=2023-02-01`;
+        while (url) { const r = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } }); templates = templates.concat(r.data.value); url = r.data.nextLink || null; }
+        result = templates.map(t => ({ id: t.name, displayName: t.properties?.displayName, severity: t.properties?.severity, kind: t.kind, status: t.properties?.status }));
+        break;
+      }
+      case "list_sentinel_hunting_queries": {
+        const token = await getARMToken();
+        const base = `https://management.azure.com/subscriptions/${subscriptionId}/resourceGroups/${sentinelResourceGroup}/providers/Microsoft.OperationalInsights/workspaces/${sentinelWorkspace}/providers/Microsoft.SecurityInsights`;
+        let all = [], url = `${base}/metadata?api-version=2023-02-01&$filter=kind eq 'HuntingQuery'`;
+        while (url) { const r = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } }); all = all.concat(r.data.value); url = r.data.nextLink || null; }
+        result = all.map(q => ({ id: q.name, displayName: q.properties?.displayName, description: q.properties?.description, tactics: q.properties?.tactics }));
+        break;
+      }
+      case "list_sentinel_bookmarks": {
+        const token = await getARMToken();
+        const base = `https://management.azure.com/subscriptions/${subscriptionId}/resourceGroups/${sentinelResourceGroup}/providers/Microsoft.OperationalInsights/workspaces/${sentinelWorkspace}/providers/Microsoft.SecurityInsights`;
+        let bookmarks = [], url = `${base}/bookmarks?api-version=2023-02-01`;
+        while (url) { const r = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } }); bookmarks = bookmarks.concat(r.data.value); url = r.data.nextLink || null; }
+        result = bookmarks;
+        break;
+      }
+      case "list_sentinel_watchlists": {
+        const token = await getARMToken();
+        const base = `https://management.azure.com/subscriptions/${subscriptionId}/resourceGroups/${sentinelResourceGroup}/providers/Microsoft.OperationalInsights/workspaces/${sentinelWorkspace}/providers/Microsoft.SecurityInsights`;
+        const r = await axios.get(`${base}/watchlists?api-version=2023-02-01`, { headers: { Authorization: `Bearer ${token}` } });
+        result = r.data.value.map(w => ({ alias: w.properties?.watchlistAlias, displayName: w.properties?.displayName, itemsCount: w.properties?.itemsSearchKey, created: w.properties?.created }));
+        break;
+      }
+      case "list_sentinel_watchlist_items": {
+        const token = await getARMToken();
+        const base = `https://management.azure.com/subscriptions/${subscriptionId}/resourceGroups/${sentinelResourceGroup}/providers/Microsoft.OperationalInsights/workspaces/${sentinelWorkspace}/providers/Microsoft.SecurityInsights`;
+        let items = [], url = `${base}/watchlists/${args.watchlistAlias}/watchlistItems?api-version=2023-02-01`;
+        while (url) { const r = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } }); items = items.concat(r.data.value); url = r.data.nextLink || null; }
+        result = items.map(i => i.properties?.itemsKeyValue);
+        break;
+      }
+      case "list_sentinel_threat_indicators": {
+        const token = await getARMToken();
+        const base = `https://management.azure.com/subscriptions/${subscriptionId}/resourceGroups/${sentinelResourceGroup}/providers/Microsoft.OperationalInsights/workspaces/${sentinelWorkspace}/providers/Microsoft.SecurityInsights`;
+        let indicators = [], url = `${base}/threatIntelligence/main/indicators?api-version=2023-02-01`;
+        while (url) { const r = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } }); indicators = indicators.concat(r.data.value); url = r.data.nextLink || null; }
+        result = indicators;
+        break;
+      }
+      case "list_sentinel_data_connectors": {
+        const token = await getARMToken();
+        const base = `https://management.azure.com/subscriptions/${subscriptionId}/resourceGroups/${sentinelResourceGroup}/providers/Microsoft.OperationalInsights/workspaces/${sentinelWorkspace}/providers/Microsoft.SecurityInsights`;
+        const r = await axios.get(`${base}/dataConnectors?api-version=2023-02-01`, { headers: { Authorization: `Bearer ${token}` } });
+        result = r.data.value.map(dc => ({ id: dc.name, kind: dc.kind, state: dc.properties?.dataTypes }));
+        break;
+      }
+      case "list_sentinel_automation_rules": {
+        const token = await getARMToken();
+        const base = `https://management.azure.com/subscriptions/${subscriptionId}/resourceGroups/${sentinelResourceGroup}/providers/Microsoft.OperationalInsights/workspaces/${sentinelWorkspace}/providers/Microsoft.SecurityInsights`;
+        const r = await axios.get(`${base}/automationRules?api-version=2023-02-01`, { headers: { Authorization: `Bearer ${token}` } });
+        result = r.data.value.map(ar => ({ id: ar.name, displayName: ar.properties?.displayName, order: ar.properties?.order, triggerOn: ar.properties?.triggeringLogic?.triggersOn, actions: ar.properties?.actions?.length }));
+        break;
+      }
       case "list_sensitivity_labels": {
         const token = await getGraphToken();
         const r = await axios.get("https://graph.microsoft.com/beta/security/informationProtection/sensitivityLabels", { headers: { Authorization: `Bearer ${token}` } });
@@ -304,27 +499,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       case "list_sensitive_info_types": {
         const token = await getGraphToken();
-        const r = await axios.get("https://graph.microsoft.com/beta/security/informationProtection/sensitiveTypes", { headers: { Authorization: `Bearer ${token}` } });
+        const r = await axios.get("https://graph.microsoft.com/beta/security/informationProtection/sensitiveTypes?$top=100", { headers: { Authorization: `Bearer ${token}` } });
         result = r.data.value ?? r.data;
         break;
       }
       case "list_label_policies": {
         const token = await getGraphToken();
-        const r = await axios.get("https://graph.microsoft.com/beta/security/informationProtection/labelPolicies", { headers: { Authorization: `Bearer ${token}` } });
+        const r = await axios.get("https://graph.microsoft.com/beta/security/informationProtection/sensitivityLabels?$select=id,displayName,color,sensitivity,tooltip,isActive,isAppliable,actionSource,parent", { headers: { Authorization: `Bearer ${token}` } });
         result = r.data.value ?? r.data;
         break;
       }
       case "list_dlp_policies": {
-        const token = await getGraphToken();
-        const r = await axios.get("https://graph.microsoft.com/beta/security/dataLossPreventionPolicies", { headers: { Authorization: `Bearer ${token}` } });
-        result = r.data.value ?? r.data;
+        result = { note: "DLP policy listing is not available via Microsoft Graph API. The Graph dataLossPreventionPolicies endpoint is for app-level policy enforcement, not admin management. Manage DLP policies via: (1) Purview compliance portal at compliance.microsoft.com, or (2) Security & Compliance PowerShell: Get-DlpCompliancePolicy.", docsUrl: "https://learn.microsoft.com/en-us/purview/dlp-learn-about-dlp" };
         break;
       }
       case "list_dlp_alerts": {
-        const token = await getGraphToken();
-        let alerts = [], url = "https://graph.microsoft.com/beta/security/alerts_v2?$filter=serviceSource eq 'microsoftPurview'";
-        while (url) { const r = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } }); alerts = alerts.concat(r.data.value); url = r.data["@odata.nextLink"] || null; }
-        result = alerts;
+        result = { note: "DLP alerts are not available as a distinct category via Microsoft Graph API security/alerts_v2. DLP policy violations surface in the Purview compliance portal under Data Loss Prevention > Alerts. For programmatic access, use the Office 365 Management Activity API or Purview compliance portal exports.", docsUrl: "https://learn.microsoft.com/en-us/purview/dlp-alerts-dashboard-get-started" };
         break;
       }
       case "list_insider_risk_alerts": {
@@ -335,57 +525,59 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       }
       case "list_insider_risk_policies": {
-        const token = await getGraphToken();
-        const r = await axios.get("https://graph.microsoft.com/beta/security/insiderRiskManagement/policies", { headers: { Authorization: `Bearer ${token}` } });
-        result = r.data.value ?? r.data;
+        result = { note: "Insider Risk Management policies are not available via Microsoft Graph API. Only IRM alerts are exposed via Graph (use list_insider_risk_alerts). Manage IRM policies via: (1) Purview compliance portal at compliance.microsoft.com/insiderRisk, or (2) Security & Compliance PowerShell: Get-InsiderRiskPolicy.", docsUrl: "https://learn.microsoft.com/en-us/purview/insider-risk-management-policies" };
         break;
       }
       case "list_information_barrier_policies": {
-        const token = await getGraphToken();
-        const r = await axios.get("https://graph.microsoft.com/beta/informationBarrierPolicies", { headers: { Authorization: `Bearer ${token}` } });
-        result = r.data.value ?? r.data;
+        result = { note: "Information Barrier Policies are not available via Microsoft Graph API. Manage via Purview compliance portal or: Get-InformationBarrierPolicy (Security & Compliance PowerShell).", docsUrl: "https://learn.microsoft.com/en-us/microsoft-365/compliance/information-barriers-policies" };
         break;
       }
       case "list_information_barrier_segments": {
-        const token = await getGraphToken();
-        const r = await axios.get("https://graph.microsoft.com/beta/informationBarrierSegments", { headers: { Authorization: `Bearer ${token}` } });
-        result = r.data.value ?? r.data;
+        result = { note: "Information Barrier Segments are not available via Microsoft Graph API. Manage via Purview compliance portal or: Get-OrganizationSegment (Security & Compliance PowerShell).", docsUrl: "https://learn.microsoft.com/en-us/microsoft-365/compliance/information-barriers-policies" };
         break;
       }
       case "list_ediscovery_cases": {
         const token = await getGraphToken();
-        const r = await axios.get("https://graph.microsoft.com/beta/compliance/ediscovery/cases", { headers: { Authorization: `Bearer ${token}` } });
+        const r = await axios.get("https://graph.microsoft.com/v1.0/security/cases/ediscoveryCases", { headers: { Authorization: `Bearer ${token}` } });
         result = r.data.value;
         break;
       }
       case "get_ediscovery_case": {
         const token = await getGraphToken();
-        const r = await axios.get(`https://graph.microsoft.com/beta/compliance/ediscovery/cases/${args.caseId}`, { headers: { Authorization: `Bearer ${token}` } });
+        const r = await axios.get(`https://graph.microsoft.com/v1.0/security/cases/ediscoveryCases/${args.caseId}`, { headers: { Authorization: `Bearer ${token}` } });
         result = r.data;
         break;
       }
       case "list_ediscovery_custodians": {
         const token = await getGraphToken();
-        const r = await axios.get(`https://graph.microsoft.com/beta/compliance/ediscovery/cases/${args.caseId}/custodians`, { headers: { Authorization: `Bearer ${token}` } });
+        const r = await axios.get(`https://graph.microsoft.com/v1.0/security/cases/ediscoveryCases/${args.caseId}/custodians`, { headers: { Authorization: `Bearer ${token}` } });
         result = r.data.value;
         break;
       }
       case "list_ediscovery_holds": {
         const token = await getGraphToken();
-        const r = await axios.get(`https://graph.microsoft.com/beta/compliance/ediscovery/cases/${args.caseId}/legalHolds`, { headers: { Authorization: `Bearer ${token}` } });
+        const r = await axios.get(`https://graph.microsoft.com/v1.0/security/cases/ediscoveryCases/${args.caseId}/noncustodialDataSources`, { headers: { Authorization: `Bearer ${token}` } });
+        result = r.data.value;
+        break;
+      }
+      case "list_ediscovery_searches": {
+        const token = await getGraphToken();
+        const r = await axios.get(`https://graph.microsoft.com/v1.0/security/cases/ediscoveryCases/${args.caseId}/searches`, { headers: { Authorization: `Bearer ${token}` } });
+        result = r.data.value;
+        break;
+      }
+      case "list_ediscovery_review_sets": {
+        const token = await getGraphToken();
+        const r = await axios.get(`https://graph.microsoft.com/v1.0/security/cases/ediscoveryCases/${args.caseId}/reviewSets`, { headers: { Authorization: `Bearer ${token}` } });
         result = r.data.value;
         break;
       }
       case "list_retention_labels": {
-        const token = await getGraphToken();
-        const r = await axios.get("https://graph.microsoft.com/beta/security/labels/retentionLabels", { headers: { Authorization: `Bearer ${token}` } });
-        result = r.data.value;
+        result = { note: "Retention labels (GET /security/labels/retentionLabels) require RecordsManagement.Read.All permission, which only supports Delegated auth (signed-in user). Application permissions are NOT supported for this API — app-only (service principal) auth will always return 403. To use this, add delegated auth support or access via: Purview compliance portal > Data lifecycle management > Retention labels.", docsUrl: "https://learn.microsoft.com/en-us/graph/api/security-labelsroot-list-retentionlabel" };
         break;
       }
       case "list_retention_event_types": {
-        const token = await getGraphToken();
-        const r = await axios.get("https://graph.microsoft.com/beta/security/triggerTypes/retentionEventTypes", { headers: { Authorization: `Bearer ${token}` } });
-        result = r.data.value;
+        result = { note: "Retention event types (GET /security/triggerTypes/retentionEventTypes) require RecordsManagement.Read.All permission, which only supports Delegated auth (signed-in user). Application permissions are NOT supported — app-only auth will return 403. Access via: Purview compliance portal > Data lifecycle management > Events.", docsUrl: "https://learn.microsoft.com/en-us/graph/api/resources/security-recordsmanagement-overview" };
         break;
       }
       case "list_audit_logs": {
@@ -405,21 +597,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       }
       case "list_communication_compliance_policies": {
-        const token = await getGraphToken();
-        const r = await axios.get("https://graph.microsoft.com/beta/compliance/communicationCompliance/policies", { headers: { Authorization: `Bearer ${token}` } });
-        result = r.data.value ?? r.data;
+        result = { note: "Communication Compliance policies are not available via Microsoft Graph API. They must be managed via: (1) Purview compliance portal at compliance.microsoft.com/communicationcompliance, or (2) Security & Compliance PowerShell: Get-SupervisoryReviewPolicyV2.", docsUrl: "https://learn.microsoft.com/en-us/purview/communication-compliance-solution-overview" };
         break;
       }
       case "list_compliance_assessments": {
-        const token = await getGraphToken();
-        const r = await axios.get("https://graph.microsoft.com/beta/compliance/complianceManagement/complianceAssessments", { headers: { Authorization: `Bearer ${token}` } });
-        result = r.data.value ?? r.data;
+        result = { note: "Compliance Manager assessments are not available via Microsoft Graph API. Access via Purview compliance portal at compliance.microsoft.com/compliancemanager or the Compliance Center REST API.", docsUrl: "https://learn.microsoft.com/en-us/microsoft-365/compliance/compliance-manager-apis" };
+        break;
+      }
+      case "get_compliance_assessment": {
+        result = { note: "Compliance Manager assessments are not available via Microsoft Graph API. Access via Purview compliance portal or the Compliance Center REST API.", assessmentId: args.assessmentId };
+        break;
+      }
+      case "list_compliance_improvement_actions": {
+        result = { note: "Compliance Manager improvement actions are not available via Microsoft Graph API. Access via Purview compliance portal or the Compliance Center REST API.", docsUrl: "https://learn.microsoft.com/en-us/microsoft-365/compliance/compliance-manager-apis" };
         break;
       }
       case "get_dspm_insights": {
         const token = await getGraphToken();
-        const r = await axios.get("https://graph.microsoft.com/beta/security/dataSecurityAndGovernance/sensitiveTypesSummary", { headers: { Authorization: `Bearer ${token}` } });
-        result = r.data.value ?? r.data;
+        const r = await axios.get("https://graph.microsoft.com/beta/security/informationProtection/sensitivityLabels", { headers: { Authorization: `Bearer ${token}` } });
+        result = { note: "DSPM summary API not yet GA. Returning active sensitivity labels as data posture proxy.", labels: r.data.value ?? [] };
         break;
       }
       default:
