@@ -1,9 +1,9 @@
 import dotenv from "dotenv";
-dotenv.config({ override: true });
+import { fileURLToPath } from "url";
+import path from "path";
+dotenv.config({ override: true, path: new URL(".env", import.meta.url).pathname });
 import { exec } from "child_process";
 import { promisify } from "util";
-import path from "path";
-import { fileURLToPath } from "url";
 import axios from "axios";
 import { ClientCertificateCredential } from "@azure/identity";
 import { ResourceManagementClient } from "@azure/arm-resources";
