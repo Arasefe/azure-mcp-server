@@ -2,8 +2,7 @@ import dotenv from "dotenv";
 import { fileURLToPath } from "url";
 import path from "path";
 dotenv.config({ override: true, path: new URL(".env", import.meta.url).pathname });
-import { exec } from "child_process";
-import { promisify } from "util";
+import { randomUUID } from "node:crypto";
 import axios from "axios";
 import { ClientCertificateCredential } from "@azure/identity";
 import { ResourceManagementClient } from "@azure/arm-resources";
@@ -11,8 +10,8 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 
-const execAsync = promisify(exec);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const GUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
 const subscriptionId = process.env.AZURE_SUBSCRIPTION_ID;
 const tenantId = process.env.AZURE_TENANT_ID;
@@ -35,6 +34,21 @@ async function getGraphToken() {
 async function getARMToken() {
   const r = await credential.getToken("https://management.azure.com/.default");
   return r.token;
+}
+
+async function resolvePrincipalId(identifier) {
+  if (GUID_RE.test(identifier)) return identifier;
+  const token = await getGraphToken();
+  const r = await axios.get(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(identifier)}?$select=id`, { headers: { Authorization: `Bearer ${token}` } });
+  return r.data.id;
+}
+
+async function resolveRoleDefinitionId(roleNameOrId, scope) {
+  if (GUID_RE.test(roleNameOrId)) return `${scope}/providers/Microsoft.Authorization/roleDefinitions/${roleNameOrId}`;
+  const token = await getARMToken();
+  const r = await axios.get(`https://management.azure.com${scope}/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01&$filter=${encodeURIComponent(`roleName eq '${roleNameOrId}'`)}`, { headers: { Authorization: `Bearer ${token}` } });
+  if (!r.data.value.length) throw new Error(`Role definition not found: ${roleNameOrId}`);
+  return r.data.value[0].id;
 }
 
 // ── MCP server ────────────────────────────────────────────────────────────────
@@ -147,9 +161,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       }
       case "assign_role": {
-        const cmd = `az role assignment create --assignee ${args.assignee} --role "${args.role}" --scope ${args.scope}`;
-        const { stdout } = await execAsync(cmd);
-        result = { message: "Role assigned", output: JSON.parse(stdout) };
+        const principalId = await resolvePrincipalId(args.assignee);
+        const roleDefinitionId = await resolveRoleDefinitionId(args.role, args.scope);
+        const token = await getARMToken();
+        const roleAssignmentId = randomUUID();
+        const url = `https://management.azure.com${args.scope}/providers/Microsoft.Authorization/roleAssignments/${roleAssignmentId}?api-version=2022-04-01`;
+        const r = await axios.put(url, { properties: { roleDefinitionId, principalId } }, { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } });
+        result = { message: "Role assigned", roleAssignmentId, principalId, roleDefinitionId, scope: args.scope, raw: r.data };
         break;
       }
       case "create_user": {
@@ -164,18 +182,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       }
       case "delete_user": {
-        await execAsync(`az ad user delete --id ${args.upn}`);
+        const token = await getGraphToken();
+        await axios.delete(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(args.upn)}`, { headers: { Authorization: `Bearer ${token}` } });
         result = { message: "User deleted", upn: args.upn };
         break;
       }
       case "list_role_assignments": {
-        const { stdout } = await execAsync(`az role assignment list --assignee ${args.assignee} -o json`);
-        result = JSON.parse(stdout);
+        const principalId = await resolvePrincipalId(args.assignee);
+        const token = await getARMToken();
+        let assignments = [], url = `https://management.azure.com/subscriptions/${subscriptionId}/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01&$filter=${encodeURIComponent(`principalId eq '${principalId}'`)}`;
+        while (url) { const r = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } }); assignments = assignments.concat(r.data.value); url = r.data.nextLink || null; }
+        result = assignments;
         break;
       }
       case "list_users": {
-        const { stdout } = await execAsync("az ad user list -o json");
-        result = JSON.parse(stdout);
+        const token = await getGraphToken();
+        let users = [], url = "https://graph.microsoft.com/v1.0/users?$select=id,displayName,userPrincipalName,mail,accountEnabled&$top=999";
+        while (url) { const r = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } }); users = users.concat(r.data.value); url = r.data["@odata.nextLink"] || null; }
+        result = users;
         break;
       }
       case "list_graph_users": {
