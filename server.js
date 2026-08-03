@@ -3,6 +3,7 @@ import { fileURLToPath } from "url";
 import path from "path";
 dotenv.config({ override: true, path: new URL(".env", import.meta.url).pathname });
 import { randomUUID } from "node:crypto";
+import fs from "fs";
 import axios from "axios";
 import { ClientCertificateCredential } from "@azure/identity";
 import { ResourceManagementClient } from "@azure/arm-resources";
@@ -49,6 +50,133 @@ async function resolveRoleDefinitionId(roleNameOrId, scope) {
   const r = await axios.get(`https://management.azure.com${scope}/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01&$filter=${encodeURIComponent(`roleName eq '${roleNameOrId}'`)}`, { headers: { Authorization: `Bearer ${token}` } });
   if (!r.data.value.length) throw new Error(`Role definition not found: ${roleNameOrId}`);
   return r.data.value[0].id;
+}
+
+// ── Per-call authorization ──────────────────────────────────────────────────
+// The service principal's Azure RBAC / Graph grants are the same for every
+// tool call. Without a layer here, "can this call happen" is decided
+// entirely by whether the SP happens to hold that permission — a classic
+// confused-deputy shape. TOOL_TIERS + the two MCP_ALLOW_* flags below add an
+// explicit, server-side authorization decision on top of that: write and
+// destructive tools are refused unless the operator has opted in for this
+// session, regardless of what the SP is otherwise allowed to do.
+
+const READ = "read";
+const WRITE = "write";
+const DESTRUCTIVE = "destructive";
+
+const TOOL_TIERS = {
+  list_resource_groups: READ,
+  create_resource_group: WRITE,
+  delete_resource_group: DESTRUCTIVE,
+  assign_role: DESTRUCTIVE,
+  create_user: WRITE,
+  delete_user: DESTRUCTIVE,
+  list_role_assignments: READ,
+  list_users: READ,
+  list_graph_users: READ,
+  list_aus: READ,
+  create_au: WRITE,
+  assign_au_role: WRITE,
+  add_au_member: WRITE,
+  list_intune_devices: READ,
+  list_noncompliant_devices: READ,
+  sync_intune_device: WRITE,
+  list_intune_compliance_policies: READ,
+  get_intune_device: READ,
+  retire_intune_device: DESTRUCTIVE,
+  wipe_intune_device: DESTRUCTIVE,
+  reboot_intune_device: WRITE,
+  list_intune_configuration_profiles: READ,
+  list_intune_apps: READ,
+  list_intune_app_assignments: READ,
+  list_intune_autopilot_devices: READ,
+  list_intune_enrollment_configurations: READ,
+  list_intune_scripts: READ,
+  list_intune_remediation_scripts: READ,
+  list_intune_managed_app_policies: READ,
+  list_defender_alerts: READ,
+  get_secure_score: READ,
+  list_defender_recommendations: READ,
+  update_defender_alert: WRITE,
+  list_sentinel_incidents: READ,
+  get_sentinel_incident: READ,
+  update_sentinel_incident: WRITE,
+  list_sentinel_analytics_rules: READ,
+  run_sentinel_kql_query: READ,
+  list_sentinel_incident_comments: READ,
+  add_sentinel_incident_comment: WRITE,
+  list_sentinel_incident_alerts: READ,
+  list_sentinel_incident_entities: READ,
+  list_sentinel_analytics_rule_templates: READ,
+  list_sentinel_hunting_queries: READ,
+  list_sentinel_bookmarks: READ,
+  list_sentinel_watchlists: READ,
+  list_sentinel_watchlist_items: READ,
+  list_sentinel_threat_indicators: READ,
+  list_sentinel_data_connectors: READ,
+  list_sentinel_automation_rules: READ,
+  list_sensitivity_labels: READ,
+  get_sensitivity_label: READ,
+  list_sensitive_info_types: READ,
+  list_label_policies: READ,
+  list_dlp_policies: READ,
+  list_dlp_alerts: READ,
+  list_insider_risk_alerts: READ,
+  list_insider_risk_policies: READ,
+  list_information_barrier_policies: READ,
+  list_information_barrier_segments: READ,
+  list_ediscovery_cases: READ,
+  get_ediscovery_case: READ,
+  list_ediscovery_custodians: READ,
+  list_ediscovery_holds: READ,
+  list_ediscovery_searches: READ,
+  list_ediscovery_review_sets: READ,
+  list_retention_labels: READ,
+  list_retention_event_types: READ,
+  list_audit_logs: READ,
+  list_signin_logs: READ,
+  list_communication_compliance_policies: READ,
+  list_compliance_assessments: READ,
+  get_compliance_assessment: READ,
+  list_compliance_improvement_actions: READ,
+  get_dspm_insights: READ,
+};
+
+const writeEnabled = process.env.MCP_ALLOW_WRITE === "true";
+const destructiveEnabled = process.env.MCP_ALLOW_DESTRUCTIVE === "true";
+
+function authorize(name) {
+  const tier = TOOL_TIERS[name];
+  if (tier === undefined) return { allowed: false, tier: "unknown", reason: `Unknown tool: ${name}` };
+  if (tier === WRITE && !writeEnabled) {
+    return { allowed: false, tier, reason: `"${name}" is a write-tier tool. Set MCP_ALLOW_WRITE=true in .env to enable write operations for this session.` };
+  }
+  if (tier === DESTRUCTIVE && !destructiveEnabled) {
+    return { allowed: false, tier, reason: `"${name}" is a destructive-tier tool (deletes, wipes, or grants access). Set MCP_ALLOW_DESTRUCTIVE=true in .env to enable destructive operations for this session.` };
+  }
+  return { allowed: true, tier };
+}
+
+// ── Local audit log ──────────────────────────────────────────────────────────
+// A second, tamper-evident record of every call and its authorization
+// decision, independent of whatever Azure/Entra logs the SP's activity on
+// the cloud side.
+
+const auditLogPath = path.join(__dirname, "audit.log");
+
+function redactArgs(args) {
+  if (!args || typeof args !== "object") return args;
+  const clone = { ...args };
+  if ("password" in clone) clone.password = "[redacted]";
+  return clone;
+}
+
+function auditEntry(entry) {
+  const line = JSON.stringify({ ts: new Date().toISOString(), ...entry }) + "\n";
+  fs.appendFile(auditLogPath, line, (err) => {
+    if (err) process.stderr.write(`Audit log write failed: ${err.message}\n`);
+  });
 }
 
 // ── MCP server ────────────────────────────────────────────────────────────────
@@ -140,6 +268,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args = {} } = request.params;
+
+  const auth = authorize(name);
+  if (!auth.allowed) {
+    auditEntry({ tool: name, tier: auth.tier, decision: "denied", reason: auth.reason, args: redactArgs(args) });
+    return { content: [{ type: "text", text: `Authorization denied: ${auth.reason}` }], isError: true };
+  }
 
   try {
     let result;
@@ -646,9 +780,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         throw new Error(`Unknown tool: ${name}`);
     }
 
+    auditEntry({ tool: name, tier: auth.tier, decision: "allowed", outcome: "ok", args: redactArgs(args) });
     return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
   } catch (err) {
     const detail = err.response ? JSON.stringify(err.response.data) : err.message;
+    auditEntry({ tool: name, tier: auth.tier, decision: "allowed", outcome: "error", error: detail, args: redactArgs(args) });
     return { content: [{ type: "text", text: `Error: ${detail}` }], isError: true };
   }
 });

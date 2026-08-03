@@ -11,17 +11,18 @@ A local **Model Context Protocol (MCP) stdio server** that exposes Azure and Mic
 5. [Authentication — Service Principal with Certificate](#5-authentication--service-principal-with-certificate)
 6. [Environment Configuration](#6-environment-configuration)
 7. [Server Structure](#7-server-structure)
-8. [Integrated Services](#8-integrated-services)
-   - [Azure Portal (Resource Groups, Users, RBAC, Administrative Units)](#81-azure-portal)
-   - [Microsoft Intune](#82-microsoft-intune)
-   - [Microsoft Defender for Cloud](#83-microsoft-defender-for-cloud)
-   - [Microsoft Sentinel](#84-microsoft-sentinel)
-   - [Microsoft Purview M365](#85-microsoft-purview-m365)
-9. [Required Permissions Summary](#9-required-permissions-summary)
-10. [Integrating with Claude Code](#10-integrating-with-claude-code)
-11. [Testing the Server](#11-testing-the-server)
-12. [Troubleshooting](#12-troubleshooting)
-13. [Bulk User Provisioning](#13-bulk-user-provisioning)
+8. [Tool Authorization Tiers](#8-tool-authorization-tiers)
+9. [Integrated Services](#9-integrated-services)
+   - [Azure Portal (Resource Groups, Users, RBAC, Administrative Units)](#91-azure-portal)
+   - [Microsoft Intune](#92-microsoft-intune)
+   - [Microsoft Defender for Cloud](#93-microsoft-defender-for-cloud)
+   - [Microsoft Sentinel](#94-microsoft-sentinel)
+   - [Microsoft Purview M365](#95-microsoft-purview-m365)
+10. [Required Permissions Summary](#10-required-permissions-summary)
+11. [Integrating with Claude Code](#11-integrating-with-claude-code)
+12. [Testing the Server](#12-testing-the-server)
+13. [Troubleshooting](#13-troubleshooting)
+14. [Bulk User Provisioning](#14-bulk-user-provisioning)
 
 ---
 
@@ -190,6 +191,10 @@ AZURE_SUBSCRIPTION_ID="<your-subscription-id>"
 SENTINEL_RESOURCE_GROUP="<resource-group-containing-sentinel-workspace>"
 SENTINEL_WORKSPACE_NAME="<log-analytics-workspace-name>"
 
+# Optional — both default to false. See section 8, Tool Authorization Tiers.
+# MCP_ALLOW_WRITE="true"
+# MCP_ALLOW_DESTRUCTIVE="true"
+
 # Required only for provision-users.js (uses client secret auth instead of certificate)
 AZURE_CLIENT_SECRET="<your-client-secret>"
 ```
@@ -239,14 +244,77 @@ Errors are returned as MCP error responses (not thrown), so Claude Code always g
 1. Add an entry to the `tools` array in `server.js`
 2. Add a `case` block in the `CallToolRequestSchema` handler
 3. Grant the service principal the required permission
-4. Test with the MCP stdio test below
-5. Restart Claude Code (or run `/mcp` to reload)
+4. Add the tool to `TOOL_TIERS` in `server.js` (`read`, `write`, or `destructive`)
+5. Test with the MCP stdio test below
+6. Restart Claude Code (or run `/mcp` to reload)
 
 ---
 
-## 8. Integrated Services
+## 8. Tool Authorization Tiers
 
-### 8.1 Azure Portal
+The service principal's Azure RBAC and Graph grants are the same for every
+tool call — Azure has no concept of "this specific call, from this specific
+session." Left alone, that means the only thing standing between Claude and
+a destructive operation is whatever permissions the SP happens to hold: a
+classic **confused-deputy** setup, where the server lends its full privilege
+to any caller without checking whether that particular call should be
+allowed.
+
+`server.js` closes that gap with an authorization layer that sits in front
+of every tool call, independent of Azure/Graph permissions:
+
+### 8.1 Tool tiers
+
+Every tool in `TOOL_TIERS` is classified into one of three tiers:
+
+| Tier          | Meaning                                              | Examples                                                    |
+| ------------- | ----------------------------------------------------- | ------------------------------------------------------------ |
+| `read`        | Read-only, always allowed                            | `list_resource_groups`, `list_sentinel_incidents`             |
+| `write`       | State-changing but reversible/scoped                 | `create_resource_group`, `sync_intune_device`, `update_sentinel_incident` |
+| `destructive` | Deletes, wipes, or grants access                     | `delete_resource_group`, `delete_user`, `wipe_intune_device`, `assign_role` |
+
+### 8.2 Opt-in flags
+
+`write` and `destructive` tools are refused by default. Two environment
+variables enable them independently:
+
+```env
+# Both default to false/unset — write and destructive tools are blocked
+# until you explicitly opt in for the session.
+MCP_ALLOW_WRITE="true"
+MCP_ALLOW_DESTRUCTIVE="true"
+```
+
+A denied call never reaches Azure — the check happens before any token is
+requested or any API call is made. Claude gets back a clear reason instead
+of a generic permission error:
+
+```json
+{
+  "content": [{ "type": "text", "text": "Authorization denied: \"delete_resource_group\" is a destructive-tier tool (deletes, wipes, or grants access). Set MCP_ALLOW_DESTRUCTIVE=true in .env to enable destructive operations for this session." }],
+  "isError": true
+}
+```
+
+### 8.3 Local audit log
+
+Every call — allowed or denied — is appended to `audit.log` (gitignored) in
+the project root as a JSON line: timestamp, tool name, tier, the
+authorization decision, and the outcome. This is a second, tamper-evident
+record of server activity independent of whatever Azure/Entra logs the
+service principal's activity on the cloud side. Obvious secret fields (e.g.
+`password`) are redacted before logging.
+
+```json
+{"ts":"2026-08-03T00:45:04.489Z","tool":"delete_resource_group","tier":"destructive","decision":"denied","reason":"...","args":{"name":"rg-example"}}
+{"ts":"2026-08-03T00:45:25.223Z","tool":"list_resource_groups","tier":"read","decision":"allowed","outcome":"ok","args":{}}
+```
+
+---
+
+## 9. Integrated Services
+
+### 9.1 Azure Portal
 
 Covers resource management, identity, RBAC, and Administrative Units.
 
@@ -281,7 +349,7 @@ Covers resource management, identity, RBAC, and Administrative Units.
 
 ---
 
-### 8.2 Microsoft Intune
+### 9.2 Microsoft Intune
 
 **API used:** Microsoft Graph API v1.0 (`/deviceManagement/...`)
 
@@ -306,7 +374,7 @@ Covers resource management, identity, RBAC, and Administrative Units.
 
 ---
 
-### 8.3 Microsoft Defender for Cloud
+### 9.3 Microsoft Defender for Cloud
 
 **API used:** Azure Resource Manager REST API (`management.azure.com`)
 
@@ -337,7 +405,7 @@ az role assignment create \
 
 ---
 
-### 8.4 Microsoft Sentinel
+### 9.4 Microsoft Sentinel
 
 **API used:** Azure Resource Manager REST API + Log Analytics Query API
 
@@ -384,7 +452,7 @@ SENTINEL_WORKSPACE_NAME="your-workspace-name"
 
 ---
 
-### 8.5 Microsoft Purview M365
+### 9.5 Microsoft Purview M365
 
 **API used:** Microsoft Graph API beta (`/beta/...`)
 
@@ -392,7 +460,7 @@ SENTINEL_WORKSPACE_NAME="your-workspace-name"
 
 > Most Purview Graph endpoints are in `/beta` and require Microsoft 365 E3/E5 licensing.
 
-#### 8.5.1 Information Protection
+#### 9.5.1 Information Protection
 
 | Tool Name                   | Description                                             |
 | --------------------------- | ------------------------------------------------------- |
@@ -403,7 +471,7 @@ SENTINEL_WORKSPACE_NAME="your-workspace-name"
 
 **Required permissions:** `InformationProtectionPolicy.Read.All`, `SensitivityLabels.Read.All`
 
-#### 8.5.2 Data Loss Prevention (DLP)
+#### 9.5.2 Data Loss Prevention (DLP)
 
 | Tool Name           | Description                       |
 | ------------------- | --------------------------------- |
@@ -414,7 +482,7 @@ SENTINEL_WORKSPACE_NAME="your-workspace-name"
 
 > DLP policy creation/modification requires `Security & Compliance PowerShell` — not available via Graph API.
 
-#### 8.5.3 Insider Risk Management (IRM)
+#### 9.5.3 Insider Risk Management (IRM)
 
 | Tool Name                    | Description                                |
 | ---------------------------- | ------------------------------------------ |
@@ -423,7 +491,7 @@ SENTINEL_WORKSPACE_NAME="your-workspace-name"
 
 **Required permissions:** `SecurityAlert.Read.All`
 
-#### 8.5.4 Information Barriers
+#### 9.5.4 Information Barriers
 
 | Tool Name                           | Description                           |
 | ----------------------------------- | ------------------------------------- |
@@ -432,7 +500,7 @@ SENTINEL_WORKSPACE_NAME="your-workspace-name"
 
 **Required permissions:** `InformationBarrierPolicy.Read.All`
 
-#### 8.5.5 eDiscovery
+#### 9.5.5 eDiscovery
 
 | Tool Name                    | Description                                   |
 | ---------------------------- | --------------------------------------------- |
@@ -445,7 +513,7 @@ SENTINEL_WORKSPACE_NAME="your-workspace-name"
 
 > The service principal must also be added to the **eDiscovery Manager** role group in the Microsoft Purview compliance portal.
 
-#### 8.5.6 Records Management & Retention
+#### 9.5.6 Records Management & Retention
 
 | Tool Name                    | Description                                          |
 | ---------------------------- | ---------------------------------------------------- |
@@ -454,7 +522,7 @@ SENTINEL_WORKSPACE_NAME="your-workspace-name"
 
 **Required permissions:** `RecordsManagement.Read.All`
 
-#### 8.5.7 Audit
+#### 9.5.7 Audit
 
 | Tool Name          | Description                                         |
 | ------------------ | --------------------------------------------------- |
@@ -470,7 +538,7 @@ SENTINEL_WORKSPACE_NAME="your-workspace-name"
 
 > Sign-in logs require Microsoft Entra ID P1 or P2 license.
 
-#### 8.5.8 Communication Compliance
+#### 9.5.8 Communication Compliance
 
 | Tool Name                                | Description                                   |
 | ---------------------------------------- | --------------------------------------------- |
@@ -478,7 +546,7 @@ SENTINEL_WORKSPACE_NAME="your-workspace-name"
 
 **Required permissions:** `CommunicationCompliance.Read.All`
 
-#### 8.5.9 Compliance Manager
+#### 9.5.9 Compliance Manager
 
 | Tool Name                     | Description                                |
 | ----------------------------- | ------------------------------------------ |
@@ -486,7 +554,7 @@ SENTINEL_WORKSPACE_NAME="your-workspace-name"
 
 **Required permissions:** `ComplianceManagement.Read.All`
 
-#### 8.5.10 Data Security and Posture Management (DSPM)
+#### 9.5.10 Data Security and Posture Management (DSPM)
 
 | Tool Name           | Description                                              |
 | ------------------- | -------------------------------------------------------- |
@@ -496,7 +564,7 @@ SENTINEL_WORKSPACE_NAME="your-workspace-name"
 
 ---
 
-## 9. Required Permissions Summary
+## 10. Required Permissions Summary
 
 ### Azure RBAC (assign via CLI or Portal)
 
@@ -534,7 +602,7 @@ az role assignment create --assignee <CLIENT_ID> --role "Log Analytics Reader" \
 
 ---
 
-## 10. Integrating with Claude Code
+## 11. Integrating with Claude Code
 
 The server is registered in `~/.claude/settings.json`. Claude Code spawns `node server.js` automatically — no manual startup needed.
 
@@ -559,7 +627,7 @@ Claude will list all 47 registered tools.
 
 ---
 
-## 11. Testing the Server
+## 12. Testing the Server
 
 ### MCP protocol smoke test (stdio)
 
@@ -592,7 +660,7 @@ printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion
 
 ---
 
-## 12. Troubleshooting
+## 13. Troubleshooting
 
 | Error                                    | Cause                                              | Fix                                                                                      |
 | ---------------------------------------- | -------------------------------------------------- | ---------------------------------------------------------------------------------------- |
@@ -604,10 +672,11 @@ printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion
 | `MODULE_NOT_FOUND` for `@azure/identity` | Corrupted install                                  | Run `rm -rf node_modules/@azure/identity && npm install @azure/identity`                 |
 | MCP server not appearing in Claude Code  | Settings not reloaded                              | Run `/mcp` in Claude Code or restart it                                                  |
 | No response on stdio                     | `console.log` polluting stdout                     | Use `process.stderr.write()` for all logging — stdout is reserved for MCP JSON-RPC       |
+| `Authorization denied: "<tool>" is a write/destructive-tier tool` | Expected — tool tier isn't enabled | Set `MCP_ALLOW_WRITE` and/or `MCP_ALLOW_DESTRUCTIVE` to `"true"` in `.env` (see section 8) |
 
 ---
 
-## 13. Bulk User Provisioning
+## 14. Bulk User Provisioning
 
 `provision-users.js` is a standalone one-shot script that creates 20 pre-defined Entra ID test users in bulk. It is independent of the MCP server.
 
