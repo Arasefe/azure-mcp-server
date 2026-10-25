@@ -1,0 +1,42 @@
+[project]
+name = "azsec-mcp"
+version = "0.1.0"
+description = "Security-governed MCP server for Entra, Intune, Defender, Sentinel and Purview"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "mcp==2.3.0",
+  "azure-identity==1.26.0",
+  "httpx==0.28.1",
+  "pydantic==2.14.1",
+  "python-dotenv==1.2.4",
+]
+
+[dependency-groups]
+dev = [
+  "pytest==9.1.1",
+  "anyio==4.15.1",
+  "respx==0.23.1",
+  "ruff==0.17.2",
+  "pyright==1.1.414",
+]
+
+[build-system]
+requires = ["uv_build==0.11.19"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+
+[tool.pyright]
+typeCheckingMode = "standard"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
