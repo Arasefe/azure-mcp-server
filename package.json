@@ -11,7 +11,7 @@
   "license": "ISC",
   "dependencies": {
     "@azure/arm-resources": "^7.0.0",
-    "@azure/identity": "^3.4.2",
+    "@azure/identity": "^4.13.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "axios": "^1.16.1",
     "dotenv": "^17.4.2"
