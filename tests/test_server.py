@@ -81,12 +81,12 @@ async def test_unexpected_exception_not_leaked(server_with_tools, audit_records)
     assert "secret detail" in audit_records()[-1]["error"]
 
 
-def test_destructive_registration_requires_target_arg(make_server):
+def test_destructive_registration_requires_retype(make_server):
     server = make_server("read")
-    with pytest.raises(ValueError, match="target_arg"):
+    with pytest.raises(ValueError, match="retype"):
         server.tool("bad", Tier.DESTRUCTIVE)
-    with pytest.raises(ValueError, match="target_arg"):
-        server.tool("bad", Tier.READ, target_arg="x")
+    with pytest.raises(ValueError, match="retype"):
+        server.tool("bad", Tier.READ, retype=("x",))
 
 
 def test_unknown_max_tier_stops_startup(make_server):

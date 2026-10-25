@@ -75,7 +75,7 @@ def server_with_tools(make_server):
             calls.append("write")
             return {"name": name}
 
-        @server.tool("t_destroy", Tier.DESTRUCTIVE, target_arg="device_id")
+        @server.tool("t_destroy", Tier.DESTRUCTIVE, retype=("device_id",))
         async def t_destroy(device_id: Guid) -> dict:
             """Destructive-tier test tool."""
             calls.append("destroy")

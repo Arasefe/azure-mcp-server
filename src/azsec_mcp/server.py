@@ -14,7 +14,7 @@ from mcp.types import ToolAnnotations
 
 from .audit import AuditLog
 from .config import Settings
-from .confirm import confirmation_param, confirmed
+from .confirm import Describe, confirmation_param, confirmed, expected_text
 from .http import AzureError, AzureHttp
 from .policy import Tier, authorize, parse_tier
 from .untrusted import wrap
@@ -44,20 +44,30 @@ class SecureServer:
             raise ToolError(decision.reason)
 
     def tool(
-        self, name: str, tier: Tier, *, target_arg: str | None = None
+        self,
+        name: str,
+        tier: Tier,
+        *,
+        retype: tuple[str, ...] = (),
+        show: tuple[str, ...] = (),
+        describe: Describe | None = None,
     ) -> Callable[[ToolFn], ToolFn]:
-        """Register `fn` as MCP tool `name` behind every control."""
-        if (tier is Tier.DESTRUCTIVE) != (target_arg is not None):
+        """Register `fn` as MCP tool `name` behind every control.
+
+        Destructive tools must name the arguments the operator retypes (`retype`), may
+        show more arguments read-only (`show`), and may add looked-up names (`describe`).
+        """
+        if (tier is Tier.DESTRUCTIVE) != bool(retype) or (not retype and (show or describe)):
             raise ValueError(
-                f"{name}: destructive tools need target_arg; other tiers must not set it"
+                f"{name}: destructive tools need retype=(...); other tiers must not confirm"
             )
 
         def decorator(fn: ToolFn) -> ToolFn:
             async def wrapper(**kwargs: Any) -> str:
                 answer = kwargs.pop("confirm", None)
                 self._gate(name, tier, kwargs)
-                if target_arg is not None:
-                    ok, why = confirmed(answer, str(kwargs[target_arg]))
+                if retype:
+                    ok, why = confirmed(answer, expected_text(kwargs, retype))
                     if not ok:
                         self._record(name, tier, "declined", kwargs, reason=why)
                         raise ToolError(f"Not executed: {why}")
@@ -82,7 +92,7 @@ class SecureServer:
             # Expose fn's own parameters (plus the hidden confirm) so the SDK builds the
             # schema and validates arguments exactly as if fn were registered directly.
             params = list(inspect.signature(fn).parameters.values())
-            if target_arg is not None:
+            if retype:
 
                 def gate(args: dict[str, Any]) -> None:
                     self._gate(name, tier, args)
@@ -91,7 +101,7 @@ class SecureServer:
                     inspect.Parameter(
                         "confirm",
                         inspect.Parameter.KEYWORD_ONLY,
-                        annotation=confirmation_param(name, target_arg, gate),
+                        annotation=confirmation_param(name, retype, show, gate, describe),
                     )
                 )
             # The SDK reads parameters via inspect.signature() but finds resolvers via

@@ -163,7 +163,7 @@ async def test_delete_resource_group_needs_confirmation(server):
 @respx.mock(assert_all_called=False)
 async def test_assign_role_rejects_foreign_subscription(server, respx_mock, audit_records):
     anything = respx_mock.route().respond(json={})
-    async with Client(server().mcp, elicitation_callback=answer(UPN)) as c:
+    async with Client(server().mcp, elicitation_callback=answer(f"Reader -> {UPN}")) as c:
         result = await c.call_tool(
             "assign_role",
             {
@@ -221,7 +221,7 @@ async def test_privileged_role_goes_through_pim(server, role, definition, lookup
     mock_user_lookup()
     (mock_role_by_name if lookup == "name" else mock_role_by_id)(definition)
     active, eligible = put_assignment(), put_eligibility()
-    async with Client(server().mcp, elicitation_callback=answer(UPN)) as c:
+    async with Client(server().mcp, elicitation_callback=answer(f"{role} -> {UPN}")) as c:
         result = await c.call_tool(
             "assign_role",
             {"assignee": UPN, "role": role, "scope": SCOPE, "justification": JUSTIFICATION},
@@ -243,7 +243,7 @@ async def test_non_privileged_role_stays_active(server):
     mock_user_lookup()
     mock_role_by_name(READER)
     active, eligible = put_assignment(), put_eligibility()
-    async with Client(server().mcp, elicitation_callback=answer(UPN)) as c:
+    async with Client(server().mcp, elicitation_callback=answer(f"Reader -> {UPN}")) as c:
         result = await c.call_tool(
             "assign_role",
             {"assignee": UPN, "role": "Reader", "scope": SCOPE, "justification": JUSTIFICATION},
@@ -298,25 +298,148 @@ async def test_list_role_eligibilities_projects_fields(server):
     assert route.calls.last.request.url.params["$filter"] == "atScope()"
 
 
+TEMPLATE = "fe930be7-5e62-47db-91af-98c3a49a38b1"  # User Administrator
+
+
+def mock_au_descriptions():
+    respx.get(f"{GRAPH}/v1.0/roleManagement/directory/roleDefinitions/{TEMPLATE}").respond(
+        json={"displayName": "User Administrator"}
+    )
+    respx.get(f"{GRAPH}/v1.0/directory/administrativeUnits/{AU_ID}").respond(
+        json={"displayName": "Seattle AU"}
+    )
+
+
 @respx.mock
-async def test_assign_au_role_is_destructive_and_uses_unified_api(server):
+async def test_assign_au_role_goes_through_pim(server):
     mock_user_lookup()
-    unified = respx.post(f"{GRAPH}/v1.0/roleManagement/directory/roleAssignments").respond(
-        201, json={"id": "ra-1"}
+    mock_au_descriptions()
+    eligible = respx.post(
+        f"{GRAPH}/v1.0/roleManagement/directory/roleEligibilityScheduleRequests"
+    ).respond(201, json={"id": "req-1", "status": "Provisioned"})
+    active = respx.post(f"{GRAPH}/v1.0/roleManagement/directory/roleAssignments").respond(
+        201, json={}
     )
     legacy = respx.route(url__regex=r".*/directoryRoles.*").respond(json={})
-    template = "fe930be7-5e62-47db-91af-98c3a49a38b1"  # User Administrator
-    async with Client(server().mcp, elicitation_callback=answer(UPN)) as c:
+    asked: list[str] = []
+    async with Client(server().mcp, elicitation_callback=answer(UPN, asked=asked)) as c:
         tools = {t.name: t for t in (await c.list_tools()).tools}
         result = await c.call_tool(
-            "assign_au_role", {"au_id": AU_ID, "user": UPN, "role_template_id": template}
+            "assign_au_role",
+            {
+                "au_id": AU_ID,
+                "user": UPN,
+                "role_template_id": TEMPLATE,
+                "justification": JUSTIFICATION,
+            },
         )
     annotations = tools["assign_au_role"].annotations
     assert annotations is not None and annotations.destructive_hint is True
     assert result.is_error is False
-    assert body(unified)["directoryScopeId"] == f"/administrativeUnits/{AU_ID}"
-    assert body(unified)["roleDefinitionId"] == template
+    request = body(eligible)
+    assert request["action"] == "adminAssign"
+    assert request["directoryScopeId"] == f"/administrativeUnits/{AU_ID}"
+    assert request["roleDefinitionId"] == TEMPLATE
+    assert request["principalId"] == USER_ID
+    assert request["justification"] == JUSTIFICATION
+    assert request["scheduleInfo"]["expiration"] == {"type": "afterDuration", "duration": "P30D"}
+    assert active.call_count == 0
     assert legacy.call_count == 0
+    assert "User Administrator" in asked[0] and "Seattle AU" in asked[0]
+
+
+@respx.mock
+async def test_au_prompt_survives_failed_name_lookup(server):
+    mock_user_lookup()
+    respx.get(url__regex=rf"{GRAPH}/v1.0/roleManagement/directory/roleDefinitions/.*").respond(404)
+    respx.get(url__regex=rf"{GRAPH}/v1.0/directory/administrativeUnits/.*").respond(404)
+    respx.post(f"{GRAPH}/v1.0/roleManagement/directory/roleEligibilityScheduleRequests").respond(
+        201, json={"id": "req-1"}
+    )
+    asked: list[str] = []
+    async with Client(server().mcp, elicitation_callback=answer(UPN, asked=asked)) as c:
+        result = await c.call_tool(
+            "assign_au_role",
+            {
+                "au_id": AU_ID,
+                "user": UPN,
+                "role_template_id": TEMPLATE,
+                "justification": JUSTIFICATION,
+            },
+        )
+    assert result.is_error is False
+    assert "lookup failed" in asked[0]
+    assert TEMPLATE in asked[0]
+
+
+@respx.mock
+async def test_add_au_member_is_destructive_and_confirmed(server):
+    mock_user_lookup()
+    mock_au_descriptions()
+    route = respx.post(f"{GRAPH}/v1.0/directory/administrativeUnits/{AU_ID}/members/$ref").respond(
+        204
+    )
+    async with Client(
+        server().mcp, elicitation_callback=answer("someone.else@cavalry77.onmicrosoft.com")
+    ) as c:
+        tools = {t.name: t for t in (await c.list_tools()).tools}
+        await c.call_tool("add_au_member", {"au_id": AU_ID, "user": UPN})
+    annotations = tools["add_au_member"].annotations
+    assert annotations is not None and annotations.destructive_hint is True
+    assert route.call_count == 0
+    asked: list[str] = []
+    async with Client(server().mcp, elicitation_callback=answer(UPN, asked=asked)) as c:
+        result = await c.call_tool("add_au_member", {"au_id": AU_ID, "user": UPN})
+    assert result.is_error is False
+    assert route.call_count == 1
+    assert "Seattle AU" in asked[0]
+
+
+@respx.mock
+async def test_assign_role_prompt_shows_role_and_scope(server):
+    mock_user_lookup()
+    mock_role_by_name(OWNER)
+    put_eligibility()
+    asked: list[str] = []
+    async with Client(
+        server().mcp, elicitation_callback=answer(f"Owner -> {UPN}", asked=asked)
+    ) as c:
+        await c.call_tool(
+            "assign_role",
+            {"assignee": UPN, "role": "Owner", "scope": SCOPE, "justification": JUSTIFICATION},
+        )
+    prompt = asked[0]
+    assert "Owner" in prompt and SCOPE in prompt and "30" in prompt
+    assert f"Retype exactly to confirm: Owner -> {UPN}" in prompt
+
+
+@respx.mock(assert_all_called=False)
+async def test_assign_role_requires_role_and_assignee_retyped(server, respx_mock):
+    respx_mock.get(f"{GRAPH}/v1.0/users/{UPN}").respond(json={"id": USER_ID})
+    respx_mock.get(f"{AUTHZ}/roleDefinitions").respond(json={"value": [OWNER]})
+    writes = respx_mock.put(url__regex=r".*").respond(201, json={})
+    for retyped in (UPN, f"Reader -> {UPN}"):
+        async with Client(server().mcp, elicitation_callback=answer(retyped)) as c:
+            result = await c.call_tool(
+                "assign_role",
+                {"assignee": UPN, "role": "Owner", "scope": SCOPE, "justification": JUSTIFICATION},
+            )
+        assert result.is_error is True
+    assert writes.call_count == 0
+
+
+@respx.mock
+async def test_retype_accepts_unicode_arrow(server):
+    mock_user_lookup()
+    mock_role_by_name(OWNER)
+    eligible = put_eligibility()
+    async with Client(server().mcp, elicitation_callback=answer(f"owner → {UPN.upper()}")) as c:
+        result = await c.call_tool(
+            "assign_role",
+            {"assignee": UPN, "role": "Owner", "scope": SCOPE, "justification": JUSTIFICATION},
+        )
+    assert result.is_error is False
+    assert eligible.call_count == 1
 
 
 @respx.mock

@@ -207,6 +207,13 @@ Every tool task follows the same steps:
   7. Added READ tool `list_role_eligibilities` (`roleEligibilityScheduleInstances`, `$filter=atScope()`).
   - Argument names are snake_case (tool names unchanged). Resource groups use REST api 2025-04-01.
 
+- [x] Follow-up fix (security review, approved 1-b, 2, 3):
+  - `SecureServer.tool(..., retype=(...), show=(...), describe=...)` replaces `target_arg`. The prompt lists every security-relevant argument; the operator retypes the `retype` args joined by ` -> ` (`→` accepted, case-insensitive).
+  - `assign_role` retypes `role -> assignee` and shows scope and eligibility_days.
+  - `assign_au_role`: all AU-scoped roles become PIM eligible via Graph `roleEligibilityScheduleRequests` (`adminAssign`, `afterDuration`), with a required justification. The prompt shows the role and AU names. Needs Graph `RoleEligibilitySchedule.ReadWrite.Directory` (check in Task 13).
+  - `add_au_member` becomes DESTRUCTIVE, with the AU name shown and the user retyped.
+  - Notes for the threat model: resolver lookups may run once per protocol round; httpx logs URLs (no tokens) to stderr.
+
 ### Task 9: `tools/intune.py` (16 tools)
 - `deviceId`/`appId`: `Guid`. `retire`/`wipe` are DESTRUCTIVE with `target_arg="device_id"`.
 - Test: `test_reboot_cannot_reach_wipe` (the research.md finding #1 payload is rejected).

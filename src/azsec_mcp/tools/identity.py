@@ -94,6 +94,20 @@ def register(s: SecureServer) -> None:
             raise ToolError(f"Role definition not found: {role}")
         return found["value"][0]
 
+    async def display_name(path: str) -> str:
+        found = await s.http.request("GET", Api.GRAPH, path, params={"$select": "displayName"})
+        return str(found.get("displayName"))
+
+    async def describe_au(args: dict[str, Any]) -> dict[str, str]:
+        """Human-readable AU name for the confirmation prompt."""
+        au = f"/v1.0/directory/administrativeUnits/{seg(args['au_id'])}"
+        return {"administrative unit": await display_name(au)}
+
+    async def describe_au_role(args: dict[str, Any]) -> dict[str, str]:
+        """Role and AU names for the confirmation prompt (IDs are shown too)."""
+        role = f"/v1.0/roleManagement/directory/roleDefinitions/{seg(args['role_template_id'])}"
+        return {"role": await display_name(role), **await describe_au(args)}
+
     # ── Resource groups ─────────────────────────────────────────────────────
 
     @s.tool("list_resource_groups", Tier.READ)
@@ -116,7 +130,7 @@ def register(s: SecureServer) -> None:
         )
         return {"name": created.get("name"), "location": created.get("location")}
 
-    @s.tool("delete_resource_group", Tier.DESTRUCTIVE, target_arg="name")
+    @s.tool("delete_resource_group", Tier.DESTRUCTIVE, retype=("name",))
     async def delete_resource_group(name: ArmName) -> dict:
         """Delete a resource group and everything in it. Returns once Azure accepts the deletion."""
         await s.http.request(
@@ -129,7 +143,12 @@ def register(s: SecureServer) -> None:
 
     # ── Azure RBAC and PIM ──────────────────────────────────────────────────
 
-    @s.tool("assign_role", Tier.DESTRUCTIVE, target_arg="assignee")
+    @s.tool(
+        "assign_role",
+        Tier.DESTRUCTIVE,
+        retype=("role", "assignee"),
+        show=("scope", "eligibility_days"),
+    )
     async def assign_role(
         assignee: UserRef,
         role: RoleName | Guid,
@@ -284,7 +303,7 @@ def register(s: SecureServer) -> None:
             "reset; the initial password was never shown.",
         }
 
-    @s.tool("delete_user", Tier.DESTRUCTIVE, target_arg="user")
+    @s.tool("delete_user", Tier.DESTRUCTIVE, retype=("user",))
     async def delete_user(user: UserRef) -> dict:
         """Delete an Entra ID user (soft delete; restorable for 30 days)."""
         await s.http.request("DELETE", Api.GRAPH, f"/v1.0/users/{seg(user)}")
@@ -312,26 +331,61 @@ def register(s: SecureServer) -> None:
         )
         return {"id": created.get("id"), "displayName": created.get("displayName")}
 
-    @s.tool("assign_au_role", Tier.DESTRUCTIVE, target_arg="user")
-    async def assign_au_role(au_id: Guid, user: UserRef, role_template_id: Guid) -> dict:
-        """Assign an Entra role scoped to one administrative unit (unified role assignment)."""
+    @s.tool(
+        "assign_au_role",
+        Tier.DESTRUCTIVE,
+        retype=("user",),
+        show=("au_id", "role_template_id", "eligibility_days"),
+        describe=describe_au_role,
+    )
+    async def assign_au_role(
+        au_id: Guid,
+        user: UserRef,
+        role_template_id: Guid,
+        justification: Justification,
+        eligibility_days: EligibilityDays = 30,
+    ) -> dict:
+        """Make a user PIM-eligible for an Entra role scoped to one administrative unit.
+
+        Every role that can be scoped to an AU is an admin role, so all of them go through
+        PIM as a time-bound eligible assignment that the user activates in PIM.
+        """
         principal = await resolve_user(user)
         created = await s.http.request(
             "POST",
             Api.GRAPH,
-            "/v1.0/roleManagement/directory/roleAssignments",
+            "/v1.0/roleManagement/directory/roleEligibilityScheduleRequests",
             json={
-                "@odata.type": "#microsoft.graph.unifiedRoleAssignment",
-                "principalId": principal,
+                "action": "adminAssign",
+                "justification": justification,
                 "roleDefinitionId": role_template_id,
                 "directoryScopeId": f"/administrativeUnits/{au_id}",
+                "principalId": principal,
+                "scheduleInfo": {
+                    "startDateTime": datetime.now(UTC).isoformat(),
+                    "expiration": {"type": "afterDuration", "duration": f"P{eligibility_days}D"},
+                },
             },
         )
-        return {"assignmentId": created.get("id"), "principalId": principal, "auId": au_id}
+        return {
+            "assignment": "eligible (PIM)",
+            "requestId": created.get("id"),
+            "status": created.get("status"),
+            "principalId": principal,
+            "auId": au_id,
+            "expires_in_days": eligibility_days,
+            "next_step": "The user activates the role in Entra ID > PIM > My roles.",
+        }
 
-    @s.tool("add_au_member", Tier.WRITE)
+    @s.tool(
+        "add_au_member",
+        Tier.DESTRUCTIVE,
+        retype=("user",),
+        show=("au_id",),
+        describe=describe_au,
+    )
     async def add_au_member(au_id: Guid, user: UserRef) -> dict:
-        """Add a user to an administrative unit."""
+        """Add a user to an administrative unit, placing them under that AU's scoped admins."""
         principal = await resolve_user(user)
         await s.http.request(
             "POST",
