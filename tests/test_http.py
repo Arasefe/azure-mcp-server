@@ -144,3 +144,27 @@ async def test_error_handles_unusual_bodies(body):
         with pytest.raises(AzureError) as exc:
             await AzureHttp(FakeCred(), c).request("GET", Api.GRAPH, "/v1.0/x")
     assert exc.value.status == 500
+
+
+@respx.mock
+async def test_paginate_flags_when_azure_has_more():
+    from azsec_mcp.http import MORE_AVAILABLE
+
+    respx.get(f"{GRAPH}/v1.0/users").respond(
+        json={"value": [{"id": 1}, {"id": 2}], "@odata.nextLink": f"{GRAPH}/p2"}
+    )
+    async with httpx.AsyncClient() as c:
+        MORE_AVAILABLE.set(False)
+        await AzureHttp(FakeCred(), c).paginate(Api.GRAPH, "/v1.0/users", max_items=2)
+        assert MORE_AVAILABLE.get() is True
+
+
+@respx.mock
+async def test_paginate_does_not_flag_a_complete_list():
+    from azsec_mcp.http import MORE_AVAILABLE
+
+    respx.get(f"{GRAPH}/v1.0/users").respond(json={"value": [{"id": 1}, {"id": 2}]})
+    async with httpx.AsyncClient() as c:
+        MORE_AVAILABLE.set(False)
+        await AzureHttp(FakeCred(), c).paginate(Api.GRAPH, "/v1.0/users", max_items=2)
+        assert MORE_AVAILABLE.get() is False

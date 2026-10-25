@@ -4,6 +4,7 @@ The bearer token is attached here and nowhere else, and only after the target UR
 checked to be HTTPS on the exact host of the API the token was issued for.
 """
 
+from contextvars import ContextVar
 from enum import StrEnum
 from typing import Any, Protocol
 from urllib.parse import urlsplit
@@ -15,6 +16,10 @@ from azure.identity import CertificateCredential
 from .config import Settings
 
 _MAX_ERROR = 500
+
+# Set by paginate() when it stops at max_items while Azure still has more. Scoped to the
+# current tool call (SecureServer resets it), so the result can be reported as incomplete.
+MORE_AVAILABLE: ContextVar[bool] = ContextVar("azsec_more_available", default=False)
 
 
 class Api(StrEnum):
@@ -93,9 +98,11 @@ class AzureHttp:
         page = await self.request("GET", api, path, params=params)
         while True:
             items.extend(page.get("value", []))
-            if len(items) >= max_items:
-                return items[:max_items]
             next_link = page.get("@odata.nextLink") or page.get("nextLink")
+            if len(items) >= max_items:
+                if len(items) > max_items or next_link:
+                    MORE_AVAILABLE.set(True)
+                return items[:max_items]
             if not next_link:
                 return items
             page = await self._send("GET", api, next_link)

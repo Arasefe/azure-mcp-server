@@ -19,10 +19,16 @@ def _dump(obj: Any) -> str:
     return json.dumps(obj, ensure_ascii=False, separators=(",", ":"), default=str)
 
 
-def _envelope(source: str, data: Any, omitted: int = 0) -> dict[str, Any]:
-    env: dict[str, Any] = {"source": source, "notice": NOTICE, "truncated": omitted > 0}
+MORE_NOTE = "Azure has more results than this server returns; narrow the query."
+
+
+def _envelope(source: str, data: Any, omitted: int = 0, more: bool = False) -> dict[str, Any]:
+    env: dict[str, Any] = {"source": source, "notice": NOTICE, "truncated": omitted > 0 or more}
     if omitted:
         env["omitted_items"] = omitted
+    if more:
+        env["more_in_azure"] = True
+        env["note"] = MORE_NOTE
     env["data"] = data
     return env
 
@@ -43,22 +49,26 @@ def _longest_fitting(n: int, build: Callable[[int], dict[str, Any]]) -> int:
     return lo
 
 
-def wrap(data: Any, source: str) -> str:
-    """Return the JSON envelope for `data`, never longer than MAX_CHARS."""
-    text = _dump(_envelope(source, data))
+def wrap(data: Any, source: str, more_in_azure: bool = False) -> str:
+    """Return the JSON envelope for `data`, never longer than MAX_CHARS.
+
+    `more_in_azure` marks a result the server itself capped (paginate's max_items).
+    """
+    m = more_in_azure
+    text = _dump(_envelope(source, data, more=m))
     if len(text) <= MAX_CHARS:
         return text
 
     if isinstance(data, list):
         # Keep the longest prefix of items that still fits.
-        k = _longest_fitting(len(data), lambda k: _envelope(source, data[:k], len(data) - k))
-        return _dump(_envelope(source, data[:k], len(data) - k))
+        k = _longest_fitting(len(data), lambda k: _envelope(source, data[:k], len(data) - k, m))
+        return _dump(_envelope(source, data[:k], len(data) - k, m))
 
     # Not a list: keep the longest string preview that still fits.
     preview = _dump(data)
 
     def build(k: int) -> dict[str, Any]:
-        env = _envelope(source, preview[:k])
+        env = _envelope(source, preview[:k], more=m)
         env["truncated"] = True
         return env
 

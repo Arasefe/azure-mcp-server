@@ -16,7 +16,7 @@ from mcp.types import ToolAnnotations
 from .audit import AuditLog
 from .config import Settings
 from .confirm import Describe, confirmation_param, confirmed, expected_text
-from .http import AzureError, AzureHttp
+from .http import MORE_AVAILABLE, AzureError, AzureHttp
 from .policy import Tier, authorize, parse_tier
 from .untrusted import wrap
 
@@ -76,8 +76,10 @@ class SecureServer:
                     # Written before the action so a crash or cancel mid-call still leaves a
                     # trace. If this write fails, the action does not run (fail closed).
                     self._record(name, tier, "allowed", kwargs, outcome="started")
+                capped = MORE_AVAILABLE.set(False)
                 try:
                     result = await fn(**kwargs)
+                    more_in_azure = MORE_AVAILABLE.get()
                 except ToolError as exc:
                     # A deliberate refusal written by this server: trusted text, passed through.
                     self._record(name, tier, "allowed", kwargs, outcome="refused", reason=str(exc))
@@ -91,6 +93,8 @@ class SecureServer:
                     detail = f"{type(exc).__name__}: {exc}"[:500]
                     self._record(name, tier, "allowed", kwargs, outcome="error", error=detail)
                     raise ToolError("Internal error; details are in the audit log") from exc
+                finally:
+                    MORE_AVAILABLE.reset(capped)
                 try:
                     self._record(name, tier, "allowed", kwargs, outcome="ok")
                 except OSError as exc:
@@ -99,7 +103,7 @@ class SecureServer:
                     # The action already happened (and its "started" record exists); reporting
                     # failure now could make the agent repeat it.
                     print(f"azsec-mcp: audit write failed after {name}: {exc}", file=sys.stderr)
-                return wrap(result, name)
+                return wrap(result, name, more_in_azure)
 
             # Expose fn's own parameters (plus the hidden confirm) so the SDK builds the
             # schema and validates arguments exactly as if fn were registered directly.

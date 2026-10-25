@@ -499,3 +499,20 @@ async def test_list_users_paginates(server):
     async with Client(server("read").mcp) as c:
         result = await c.call_tool("list_users", {})
     assert [u["id"] for u in json.loads(text(result))["data"]] == ["1", "2"]
+
+
+@respx.mock
+async def test_capped_list_is_reported_as_truncated(server):
+    page = [{"id": str(i)} for i in range(300)]
+    respx.get(f"{GRAPH}/v1.0/users", params={"page": "2"}).respond(
+        json={"value": page, "@odata.nextLink": f"{GRAPH}/v1.0/users?page=3"}
+    )
+    respx.get(f"{GRAPH}/v1.0/users").respond(
+        json={"value": page, "@odata.nextLink": f"{GRAPH}/v1.0/users?page=2"}
+    )
+    async with Client(server("read").mcp) as c:
+        result = await c.call_tool("list_graph_users", {})
+    envelope = json.loads(text(result))
+    assert len(envelope["data"]) == 500
+    assert envelope["truncated"] is True
+    assert envelope["more_in_azure"] is True
