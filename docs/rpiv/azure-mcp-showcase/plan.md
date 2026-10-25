@@ -275,6 +275,10 @@ Every tool task follows the same steps:
   - more than 3 denials in 10 minutes;
   - a broken hash chain, from a scheduled `verify` heartbeat.
 - Test: KQL validated via `run_sentinel_kql_query` on sample rows.
+- [x] Built and validated, **not deployed**: creating Azure resources plus an RBAC assignment is an outward change kept for the user, and `infra/README.md` gives the what-if and deploy commands.
+  - `azsec-mcp-ship` is a separate command, not a server hook. It verifies the chain, uploads new records (Logs Ingestion API 2023-01-01, DCR kind Direct) and sends a heartbeat with the head. It detects tail truncation (seq regression) and full rewrite (the shipped record's hash changed). State is atomic and 0600; a failed upload doesn't advance it. 12 tests.
+  - `infra/audit-ingestion.bicep`: table, DCR, and Monitoring Metrics Publisher (3913510d-…) scoped to the DCR only. Compiles with `az bicep build` (0 warnings).
+  - `detections/agent-misuse.kql`: 4 findings, validated live through the server's own KQL tool with synthetic rows. All fired, the benign host was ignored.
 
 ## Milestone 5: Tell the story
 ### Task 16: `docs/THREAT_MODEL.md`, `docs/PERMISSIONS.md`, README rewrite
