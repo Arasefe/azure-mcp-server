@@ -142,17 +142,17 @@ Record fields: `ts`, `seq`, `prev`, `hash` + the event, where `hash = sha256(can
 - `class Api(StrEnum)`: `GRAPH="https://graph.microsoft.com"`, `ARM="https://management.azure.com"`, `LA="https://api.loganalytics.io"`. Each has its scope `<base>/.default`.
 - `class AzureHttp(credential: TokenCredential, client: httpx.AsyncClient)` with:
   - `async request(method: str, api: Api, path: str, *, params: dict | None = None, json: object | None = None) -> dict`. `path` must already be made of `seg()` parts and start with `/`. It raises `AzureError(status, code, message)` on 4xx/5xx, with the message trimmed to 500 chars.
-  - `async paginate(api, path, *, params=None, max_items: int = 500, next_key: str = "@odata.nextLink"|"nextLink") -> list[dict]`.
+  - `async paginate(api, path, *, params=None, max_items: int = 500) -> list[dict]` (follows `@odata.nextLink` or `nextLink`, whichever the page has; deviation approved in Task 6).
   - The token comes from the sync `CertificateCredential.get_token` via `anyio.to_thread.run_sync`. The credential caches tokens, so this avoids an aiohttp dependency.
 - `make_http(settings) -> AzureHttp`.
-- [ ] Explain → approve.
-- [ ] Tests (respx-mocked, fake credential):
+- [x] Explain → approve.
+- [x] Tests (respx-mocked, fake credential):
   - `test_request_sets_bearer_for_matching_scope`.
   - `test_paginate_follows_next_link`.
   - `test_paginate_stops_at_max_items`.
   - `test_paginate_refuses_foreign_next_link`: `nextLink` = `https://evil.example/x` → `AzureError`, and the evil host route has `call_count == 0`.
   - `test_error_body_trimmed`.
-- [ ] FAIL → implement → PASS → commit.
+- [x] FAIL → implement → PASS → commit.
 
 ### Task 7: `secure_tool` decorator, confirmation, and server factory
 **Files:** create `src/azsec_mcp/confirm.py`, `src/azsec_mcp/server.py`, `src/azsec_mcp/__main__.py`, `tests/test_server.py`, `tests/security/test_confirmation.py`.
