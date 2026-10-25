@@ -46,16 +46,50 @@ CROSS_SCOPE = re.compile(
     rf"(?:\b(?:{_SCOPE_NAMES})|\[\s*['\"]\s*(?:{_SCOPE_NAMES})\s*['\"]\s*\])\s*\(",
     re.IGNORECASE,
 )
-_LINE_COMMENT = re.compile(r"//[^\n]*")
+
+
+def strip_comments(query: str) -> str:
+    """Remove KQL // comments that are outside string literals; strings are kept verbatim.
+
+    Understands '...' and "..." (backslash escapes), @'...' and @"..." (verbatim, no
+    escapes) and ```...``` (multi-line), so a '//' inside a string is not a comment.
+    """
+    out: list[str] = []
+    i, n = 0, len(query)
+    while i < n:
+        if query.startswith("```", i):
+            end = query.find("```", i + 3)
+            end = n if end < 0 else end + 3
+            out.append(query[i:end])
+            i = end
+        elif query[i] == "@" and i + 1 < n and query[i + 1] in "'\"":
+            end = query.find(query[i + 1], i + 2)
+            end = n if end < 0 else end + 1
+            out.append(query[i:end])
+            i = end
+        elif query[i] in "'\"":
+            quote, j = query[i], i + 1
+            while j < n and query[j] != quote:
+                j += 2 if query[j] == "\\" else 1
+            out.append(query[i : j + 1])
+            i = j + 1
+        elif query.startswith("//", i):
+            end = query.find("\n", i)
+            out.append(" ")
+            i = n if end < 0 else end
+        else:
+            out.append(query[i])
+            i += 1
+    return "".join(out)
 
 
 def cross_scope_reason(query: str) -> str | None:
     """Name of the first cross-scope construct in `query`, else None.
 
-    Checked on the raw text and on the text with // comments removed, so neither a comment
-    between name and '(' nor a '//' inside a string literal can hide a call.
+    Checked on the raw text and on the text with real // comments removed (string-aware),
+    so neither a comment between name and '(' nor a '//' inside a string can hide a call.
     """
-    for candidate in (query, _LINE_COMMENT.sub(" ", query)):
+    for candidate in (query, strip_comments(query)):
         found = CROSS_SCOPE.search(candidate)
         if found:
             return found.group(0)

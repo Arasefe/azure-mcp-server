@@ -214,6 +214,10 @@ async def test_update_incident_etag_conflict_reported(server):
         "database('other').SecurityEvent",
         "externaldata (x:string) ['https://evil.example/a.csv']",
         "external_table('t')",
+        'print "//", workspace // c\n("other").SecurityEvent',
+        "print @'c:\\//', workspace // c\n('other').SecurityEvent",
+        "print 'it\\'s //', workspace // c\n('other').SecurityEvent",
+        "print ```//\nmulti```, workspace // c\n('other').SecurityEvent",
     ],
 )
 @respx.mock(assert_all_called=False)
@@ -383,3 +387,8 @@ async def test_incident_alerts_and_entities_post(server):
 def test_cross_scope_check_has_no_false_negative_for_plain_queries():
     assert sentinel.cross_scope_reason("SigninLogs | where AppDisplayName has 'workspace'") is None
     assert sentinel.cross_scope_reason("SecurityEvent | summarize count() by Computer") is None
+
+
+def test_strip_comments_keeps_strings_and_removes_real_comments():
+    q = "print \"a//b\", @'x//y' // real comment\n| take 1"
+    assert sentinel.strip_comments(q) == "print \"a//b\", @'x//y' \n| take 1"
