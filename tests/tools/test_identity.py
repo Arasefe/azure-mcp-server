@@ -287,7 +287,7 @@ async def test_prompt_shows_justification(server):
     args = {"assignee": UPN, "role": "Owner", "scope": SCOPE, "justification": JUSTIFICATION}
     async with Client(server().mcp, elicitation_callback=callback) as c:
         await c.call_tool("assign_role", args)
-    assert f"justification: {JUSTIFICATION}" in asked[0]
+    assert f'justification: "{JUSTIFICATION}" (text from the agent)' in asked[0]
 
 
 @respx.mock

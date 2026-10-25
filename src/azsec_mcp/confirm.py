@@ -23,6 +23,28 @@ Describe = Callable[[dict[str, Any]], Awaitable[dict[str, str]]]
 MAX_DIRECTORY_TEXT = 80
 
 
+def _clean(value: str) -> str:
+    """Control, format (bidi, zero-width) and line/paragraph separators become spaces."""
+    cleaned = "".join(
+        " " if unicodedata.category(ch) in ("Cc", "Cf", "Zl", "Zp") else ch for ch in value
+    )
+    cleaned = " ".join(cleaned.split()).replace('"', "'")
+    if len(cleaned) > MAX_DIRECTORY_TEXT:
+        cleaned = cleaned[: MAX_DIRECTORY_TEXT - 1] + "…"
+    return cleaned
+
+
+def agent_value(value: Any) -> str:
+    """Render an argument the agent supplied. Free text (anything with whitespace or special
+    characters) is cleaned, quoted and labelled like directory text, so a justification or
+    comment cannot add fake lines to the prompt; plain tokens (IDs, enums, numbers) stay plain.
+    """
+    text = str(value)
+    if re.fullmatch(r"[A-Za-z0-9._@'/()+-]{1,200}", text):
+        return text
+    return f'"{_clean(text)}" (text from the agent)'
+
+
 def directory_text(value: str) -> str:
     """Render a directory-supplied name safely for the human-approval prompt.
 
@@ -31,13 +53,7 @@ def directory_text(value: str) -> str:
     and zero-width) and line/paragraph separator characters become spaces, the text is
     capped, quoted, and labelled so it cannot pose as a line of the prompt itself.
     """
-    cleaned = "".join(
-        " " if unicodedata.category(ch) in ("Cc", "Cf", "Zl", "Zp") else ch for ch in value
-    )
-    cleaned = " ".join(cleaned.split()).replace('"', "'")
-    if len(cleaned) > MAX_DIRECTORY_TEXT:
-        cleaned = cleaned[: MAX_DIRECTORY_TEXT - 1] + "…"
-    return f'"{cleaned}" (name from directory)'
+    return f'"{_clean(value)}" (name from directory)'
 
 
 class Confirm(BaseModel):
@@ -68,7 +84,7 @@ def confirmation_param(
     async def resolver(**kwargs: Any) -> Elicit[Confirm]:
         gate(kwargs)  # raises if the tier forbids the call, before anyone is asked
         lines = [f"{tool} is destructive and cannot be undone."]
-        lines += [f"{name}: {kwargs[name]}" for name in names]
+        lines += [f"{name}: {agent_value(kwargs[name])}" for name in names]
         if describe is not None:
             try:
                 extra = await describe(kwargs)
