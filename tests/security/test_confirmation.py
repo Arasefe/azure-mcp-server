@@ -78,7 +78,7 @@ async def test_destructive_denied_by_tier_never_asks_human(server_with_tools, au
     assert audit_records()[-1]["decision"] == "denied"
 
 
-async def test_destructive_denied_when_client_cannot_elicit(server_with_tools):
+async def test_destructive_denied_when_client_cannot_elicit(server_with_tools, audit_records):
     server, calls = server_with_tools("destructive")
 
     def leaves(exc):
@@ -92,3 +92,7 @@ async def test_destructive_denied_when_client_cannot_elicit(server_with_tools):
     errors = leaves(info.value)
     assert any(isinstance(e, MCPError) and "elicitation" in str(e) for e in errors)
     assert calls == []
+    # The attempt is still visible: the resolver audits that it asked for confirmation.
+    assert [(r["tool"], r["decision"]) for r in audit_records()] == [
+        ("t_destroy", "confirmation_requested")
+    ]

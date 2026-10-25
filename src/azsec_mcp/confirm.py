@@ -77,12 +77,15 @@ def confirmation_param(
     show: tuple[str, ...],
     gate: Callable[[dict[str, Any]], None],
     describe: Describe | None = None,
+    asking: Callable[[dict[str, Any]], None] | None = None,
 ) -> Any:
     """Type for the hidden `confirm` parameter of a destructive tool."""
     names = retype + tuple(n for n in show if n not in retype)
 
     async def resolver(**kwargs: Any) -> Elicit[Confirm]:
         gate(kwargs)  # raises if the tier forbids the call, before anyone is asked
+        if asking is not None:
+            asking(kwargs)
         lines = [f"{tool} is destructive and cannot be undone."]
         lines += [f"{name}: {agent_value(kwargs[name])}" for name in names]
         if describe is not None:

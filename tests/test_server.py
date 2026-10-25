@@ -129,3 +129,55 @@ async def test_refusal_reason_passes_through(make_server, audit_records):
     record = audit_records()[-1]
     assert record["outcome"] == "refused"
     assert "scope must be inside" in record["reason"]
+
+
+async def test_state_changing_call_is_audited_before_it_runs(make_server, audit_records):
+    server = make_server("write")
+    seen: list[dict] = []
+
+    @server.tool("t_change", Tier.WRITE)
+    async def t_change() -> dict:
+        """Records what the audit log already says while the action is running."""
+        seen.append(audit_records()[-1])
+        return {"ok": True}
+
+    async with Client(server.mcp) as c:
+        await c.call_tool("t_change", {})
+    assert seen[0]["outcome"] == "started" and seen[0]["decision"] == "allowed"
+    assert [r["outcome"] for r in audit_records()] == ["started", "ok"]
+
+
+async def test_read_call_has_no_started_record(server_with_tools, audit_records):
+    server, _ = server_with_tools("read")
+    async with Client(server.mcp) as c:
+        await c.call_tool("t_read", {})
+    assert [r.get("outcome") for r in audit_records()] == ["ok"]
+
+
+async def test_final_audit_failure_does_not_report_a_done_action_as_failed(
+    make_server, audit_records, monkeypatch
+):
+    server = make_server("write")
+    done: list[str] = []
+
+    @server.tool("t_change", Tier.WRITE)
+    async def t_change() -> dict:
+        """Succeeds; the audit write after it fails."""
+        done.append("x")
+        return {"ok": True}
+
+    real_append = server._audit.append
+    calls = {"n": 0}
+
+    def flaky_append(event):
+        calls["n"] += 1
+        if calls["n"] == 2:  # the record written after the action
+            raise OSError("disk full")
+        return real_append(event)
+
+    monkeypatch.setattr(server._audit, "append", flaky_append)
+    async with Client(server.mcp) as c:
+        result = await c.call_tool("t_change", {})
+    assert done == ["x"]
+    assert result.is_error is False
+    assert audit_records()[-1]["outcome"] == "started"  # the trace that it ran survives

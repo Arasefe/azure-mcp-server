@@ -5,6 +5,7 @@ Per call: SDK validates args -> tier check -> [destructive: human confirmation]
 """
 
 import inspect
+import sys
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -71,6 +72,10 @@ class SecureServer:
                     if not ok:
                         self._record(name, tier, "declined", kwargs, reason=why)
                         raise ToolError(f"Not executed: {why}")
+                if tier is not Tier.READ:
+                    # Written before the action so a crash or cancel mid-call still leaves a
+                    # trace. If this write fails, the action does not run (fail closed).
+                    self._record(name, tier, "allowed", kwargs, outcome="started")
                 try:
                     result = await fn(**kwargs)
                 except ToolError as exc:
@@ -86,7 +91,14 @@ class SecureServer:
                     detail = f"{type(exc).__name__}: {exc}"[:500]
                     self._record(name, tier, "allowed", kwargs, outcome="error", error=detail)
                     raise ToolError("Internal error; details are in the audit log") from exc
-                self._record(name, tier, "allowed", kwargs, outcome="ok")
+                try:
+                    self._record(name, tier, "allowed", kwargs, outcome="ok")
+                except OSError as exc:
+                    if tier is Tier.READ:
+                        raise
+                    # The action already happened (and its "started" record exists); reporting
+                    # failure now could make the agent repeat it.
+                    print(f"azsec-mcp: audit write failed after {name}: {exc}", file=sys.stderr)
                 return wrap(result, name)
 
             # Expose fn's own parameters (plus the hidden confirm) so the SDK builds the
@@ -97,11 +109,16 @@ class SecureServer:
                 def gate(args: dict[str, Any]) -> None:
                     self._gate(name, tier, args)
 
+                def asking(args: dict[str, Any]) -> None:
+                    # Audited when the question is asked, so an attempt is visible even if the
+                    # client cannot answer and the wrapper never runs.
+                    self._record(name, tier, "confirmation_requested", args)
+
                 params.append(
                     inspect.Parameter(
                         "confirm",
                         inspect.Parameter.KEYWORD_ONLY,
-                        annotation=confirmation_param(name, retype, show, gate, describe),
+                        annotation=confirmation_param(name, retype, show, gate, describe, asking),
                     )
                 )
             # The SDK reads parameters via inspect.signature() but finds resolvers via
