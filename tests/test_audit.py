@@ -107,3 +107,23 @@ def test_load_returns_records_split_on_newline_only(tmp_path):
     ok, bad, records = AuditLog.load(p)
     assert (ok, bad) == (True, None)
     assert records[0]["args"]["q"] == "a b"
+
+
+def test_two_writers_on_one_file_keep_the_chain_valid(tmp_path):
+    # Two Claude Code sessions = two server processes appending to the same audit.jsonl.
+    # Separate AuditLog instances have separate in-memory state, like separate processes.
+    p = tmp_path / "a.jsonl"
+    first, second = AuditLog(p), AuditLog(p)
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(lambda i: (first if i % 2 else second).append({"i": i}), range(40)))
+    assert AuditLog.verify(p) == (True, None)
+    assert [json.loads(line)["seq"] for line in read_lines(p)] == list(range(1, 41))
+
+
+def test_resume_after_a_record_larger_than_one_read_chunk(tmp_path):
+    p = tmp_path / "a.jsonl"
+    log = AuditLog(p)
+    log.append({"args": {"query": "x" * 50_000}})
+    log.append({"tool": "after"})
+    AuditLog(p).append({"tool": "third"})
+    assert AuditLog.verify(p) == (True, None)
