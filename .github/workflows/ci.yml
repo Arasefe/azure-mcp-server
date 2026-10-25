@@ -1,0 +1,61 @@
+# CI for the local Azure MCP server. Static gates only: the server authenticates to
+# Cavalry77 with a service-principal certificate (cavalry-sp.combined.pem) and .env,
+# both gitignored, so CI never holds Azure credentials and never calls Azure.
+#
+# Every third-party action is pinned to a full commit SHA and every image to an exact
+# version; the token is read-only.
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # Install from the lockfile and syntax-check every entry point
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - name: Syntax check
+        run: for f in *.js *.mjs; do node --check "$f"; done
+
+  # Fail on a known HIGH/CRITICAL vulnerability in the dependency tree
+  dependency-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Trivy dependency scan (fail on HIGH/CRITICAL)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >
+          docker run --rm -e GITHUB_TOKEN -v "$PWD:/src" aquasec/trivy:0.76.0
+          fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1 /src
+
+  # Catch a committed certificate, key or .env anywhere in history
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0 # required for gitleaks to scan the full history
+      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: false # token is read-only, so no PR comments
+
+  # SAST: fail on any blocking Semgrep finding
+  sast:
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep:1.182.1
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - run: semgrep scan --config auto --error .
