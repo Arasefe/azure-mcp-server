@@ -134,6 +134,7 @@ async def test_list_resource_groups_maps_name_location(server):
 
 @respx.mock
 async def test_create_resource_group_puts_location(server):
+    respx.head(f"{ARM}{SCOPE}/resourcegroups/rg-lab").respond(404)
     route = respx.put(f"{ARM}{SCOPE}/resourcegroups/rg-lab").respond(
         201, json={"name": "rg-lab", "location": "westus2"}
     )
@@ -516,3 +517,14 @@ async def test_capped_list_is_reported_as_truncated(server):
     assert len(envelope["data"]) == 500
     assert envelope["truncated"] is True
     assert envelope["more_in_azure"] is True
+
+
+@respx.mock
+async def test_create_resource_group_refuses_existing_group(server):
+    respx.head(f"{ARM}{SCOPE}/resourcegroups/rg-lab").respond(204)
+    put = respx.put(f"{ARM}{SCOPE}/resourcegroups/rg-lab").respond(201, json={})
+    async with Client(server("write").mcp) as c:
+        result = await c.call_tool("create_resource_group", {"name": "rg-lab"})
+    assert result.is_error is True
+    assert "already exists" in text(result)
+    assert put.call_count == 0  # a PUT would replace the group's tags

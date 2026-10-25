@@ -166,3 +166,31 @@ async def test_unicode_line_separators_in_args_do_not_break_shipping(paths):
     assert result["chainOk"] is True
     assert [r["Seq"] for r in rows if r["Kind"] == "call"] == [1, 2, 3, 4]
     assert rows[1]["Args"] == {"q": "a b"}
+
+
+@respx.mock
+async def test_batches_stay_under_the_ingestion_size_limit(paths):
+    log = AuditLog(paths[0])
+    for _ in range(30):
+        log.append({"tool": "run_sentinel_kql_query", "args": {"query": "x" * 60_000}})
+    route = respx.post(URL).respond(204)
+    async with httpx.AsyncClient() as c:
+        await shipper(paths, c).run()
+    sizes = [len(call.request.content) for call in route.calls]
+    assert max(sizes) < 1_000_000
+    assert sum(1 for r in sent_rows(route) if r["Kind"] == "call") == 30
+
+
+@respx.mock
+async def test_broken_chain_heartbeat_reports_last_good_record(paths):
+    write_records(paths[0], 3)
+    lines = paths[0].read_text().splitlines()
+    good_hash = json.loads(lines[1])["hash"]
+    lines[2] = lines[2].replace('"t2"', '"tX"')
+    paths[0].write_text("\n".join(lines) + "\n")
+    route = respx.post(URL).respond(204)
+    async with httpx.AsyncClient() as c:
+        await shipper(paths, c).run()
+    beat = sent_rows(route)[0]
+    assert beat["ChainOk"] is False
+    assert beat["Seq"] == 2 and beat["RecordHash"] == good_hash

@@ -10,7 +10,7 @@ from typing import Annotated, Any
 from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import Field
 
-from ..http import Api
+from ..http import Api, AzureError
 from ..ids import (
     ArmName,
     AzureRegion,
@@ -120,13 +120,19 @@ def register(s: SecureServer) -> None:
 
     @s.tool("create_resource_group", Tier.WRITE)
     async def create_resource_group(name: ArmName, location: AzureRegion = "eastus") -> dict:
-        """Create (or update) a resource group in this server's subscription."""
+        """Create a new resource group in this server's subscription (refuses existing ones)."""
+        path = f"{sub_path}/resourcegroups/{seg(name)}"
+        try:
+            # "Check existence" (HEAD: 204 exists, 404 not found). A PUT on an existing group
+            # is a full replace and would silently drop its tags.
+            await s.http.request("HEAD", Api.ARM, path, params={"api-version": RG_API})
+        except AzureError as exc:
+            if exc.status != 404:
+                raise
+        else:
+            raise ToolError(f"Resource group {name} already exists; not modified")
         created = await s.http.request(
-            "PUT",
-            Api.ARM,
-            f"{sub_path}/resourcegroups/{seg(name)}",
-            params={"api-version": RG_API},
-            json={"location": location},
+            "PUT", Api.ARM, path, params={"api-version": RG_API}, json={"location": location}
         )
         return {"name": created.get("name"), "location": created.get("location")}
 

@@ -34,6 +34,7 @@ STREAM = "Custom-AzSecMcpAudit_CL"
 INGEST_API = "2023-01-01"
 MONITOR_SCOPE = "https://monitor.azure.com//.default"
 BATCH = 500
+MAX_BATCH_BYTES = 900_000  # the Logs Ingestion API accepts at most 1 MB per call
 _DCR_ID = re.compile(r"dcr-[0-9a-f]{32}")
 
 
@@ -92,6 +93,23 @@ def _row(record: dict[str, Any], host: str) -> dict[str, Any]:
     }
 
 
+def _batches(rows: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+    """Split rows into calls of at most BATCH rows and MAX_BATCH_BYTES of JSON."""
+    batches: list[list[dict[str, Any]]] = []
+    current: list[dict[str, Any]] = []
+    size = 2  # the enclosing [ ]
+    for row in rows:
+        row_size = len(json.dumps(row, default=str).encode("utf-8")) + 1
+        if current and (len(current) >= BATCH or size + row_size > MAX_BATCH_BYTES):
+            batches.append(current)
+            current, size = [], 2
+        current.append(row)
+        size += row_size
+    if current:
+        batches.append(current)
+    return batches
+
+
 class Shipper:
     def __init__(
         self,
@@ -116,16 +134,16 @@ class Shipper:
         """Rows to ship, the heartbeat, and the state to save if the upload succeeds."""
         problems: list[str] = []
         records: list[dict[str, Any]] = []
+        good: list[dict[str, Any]] = []
         if self._audit.exists():
             # One parser for verify and shipping, so they can never disagree about records.
-            ok, bad_line, parsed = AuditLog.load(self._audit)
+            ok, bad_line, good = AuditLog.load(self._audit)
             if ok:
-                records = parsed
+                records = good
             else:
                 problems.append(f"chain broken at line {bad_line}")
-        head = (
-            ShipState(records[-1]["seq"], records[-1]["hash"]) if records else ShipState(0, GENESIS)
-        )
+        # The heartbeat reports the last record that still verifies, even when the chain breaks.
+        head = ShipState(good[-1]["seq"], good[-1]["hash"]) if good else ShipState(0, GENESIS)
 
         if not problems and state.seq:
             if head.seq < state.seq:
@@ -163,8 +181,8 @@ class Shipper:
         """Ship new records, then the heartbeat; save state only after both succeed."""
         state = load_state(self._state_path)
         rows, heartbeat, next_state = self._plan(state)
-        for start in range(0, len(rows), BATCH):
-            await self._post(rows[start : start + BATCH])
+        for batch in _batches(rows):
+            await self._post(batch)
         await self._post([heartbeat])
         save_state(self._state_path, next_state)
         return {"shipped": len(rows), "chainOk": heartbeat["ChainOk"], "head": next_state.seq}
