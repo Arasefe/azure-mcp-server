@@ -93,8 +93,16 @@ class AuditLog:
                     "prev": prev,
                 }
                 record["hash"] = _digest(record)
-                os.write(fd, (_canonical(record) + "\n").encode("utf-8"))
-                os.fsync(fd)
+                data = (_canonical(record) + "\n").encode("utf-8")
+                start = os.lseek(fd, 0, os.SEEK_END)
+                try:
+                    written = 0
+                    while written < len(data):  # os.write may accept only part of a buffer
+                        written += os.write(fd, data[written:])
+                    os.fsync(fd)
+                except OSError:
+                    os.ftruncate(fd, start)  # never leave a partial record behind
+                    raise
                 return record["hash"]
             finally:
                 os.close(fd)  # closing releases the flock

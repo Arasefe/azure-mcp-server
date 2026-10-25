@@ -1,4 +1,5 @@
 import json
+import os
 import stat
 from concurrent.futures import ThreadPoolExecutor
 
@@ -126,4 +127,40 @@ def test_resume_after_a_record_larger_than_one_read_chunk(tmp_path):
     log.append({"args": {"query": "x" * 50_000}})
     log.append({"tool": "after"})
     AuditLog(p).append({"tool": "third"})
+    assert AuditLog.verify(p) == (True, None)
+
+
+def test_short_write_is_completed(tmp_path, monkeypatch):
+    p = tmp_path / "a.jsonl"
+    real_write = os.write
+
+    def short_write(fd, data):  # the OS may accept only part of a buffer
+        return real_write(fd, data[: max(1, len(data) // 3)])
+
+    monkeypatch.setattr(os, "write", short_write)
+    log = AuditLog(p)
+    log.append({"tool": "a", "args": {"q": "x" * 300}})
+    log.append({"tool": "b"})
+    monkeypatch.setattr(os, "write", real_write)
+    assert AuditLog.verify(p) == (True, None)
+
+
+def test_failed_write_leaves_no_partial_record(tmp_path, monkeypatch):
+    p = tmp_path / "a.jsonl"
+    AuditLog(p).append({"tool": "a"})
+    size = p.stat().st_size
+    real_write = os.write
+    state = {"n": 0}
+
+    def failing_write(fd, data):
+        state["n"] += 1
+        if state["n"] == 1:
+            return real_write(fd, data[:10])  # part of the record lands...
+        raise OSError(28, "No space left on device")  # ...then the disk is full
+
+    monkeypatch.setattr(os, "write", failing_write)
+    with pytest.raises(OSError):
+        AuditLog(p).append({"tool": "b"})
+    monkeypatch.setattr(os, "write", real_write)
+    assert p.stat().st_size == size  # rolled back
     assert AuditLog.verify(p) == (True, None)
