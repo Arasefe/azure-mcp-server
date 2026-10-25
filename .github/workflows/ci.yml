@@ -1,33 +1,34 @@
-# CI for the local Azure MCP server. Static gates only: the server authenticates to
-# Cavalry77 with a service-principal certificate (cavalry-sp.combined.pem) and .env,
-# both gitignored, so CI never holds Azure credentials and never calls Azure.
+# CI for the azsec-mcp server. Static gates only: the server authenticates to Cavalry77 with a
+# service-principal certificate (cavalry-sp.combined.pem) and .env, both gitignored, so CI never
+# holds Azure credentials and never calls Azure. Every test mocks Azure with respx.
 #
-# Every third-party action is pinned to a full commit SHA and every image to an exact
-# version; the token is read-only.
+# Every third-party action is pinned to a full commit SHA and every image to an exact version;
+# the token is read-only.
 name: ci
 on:
   push:
-    branches: [main]
+    branches: [main, python-rewrite]
   pull_request:
 
 permissions:
   contents: read
 
 jobs:
-  # Install from the lockfile and syntax-check every entry point
-  build:
+  # Locked install, lint, format, types and the full test suite
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
-          node-version: "20"
-          cache: npm
-      - run: npm ci
-      - name: Syntax check
-        run: git ls-files '*.js' '*.mjs' | xargs -n1 node --check
+          version: "0.11.19"
+      - run: uv sync --locked
+      - run: uv run ruff check
+      - run: uv run ruff format --check
+      - run: uv run pyright
+      - run: uv run pytest -q
 
-  # Fail on a known HIGH/CRITICAL vulnerability in the dependency tree
+  # Fail on a known HIGH/CRITICAL vulnerability in the locked dependency tree (reads uv.lock)
   dependency-scan:
     runs-on: ubuntu-latest
     steps:
