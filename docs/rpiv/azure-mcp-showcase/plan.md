@@ -28,7 +28,7 @@ Rejected alternatives, one line each:
 
 ## Global Constraints
 - `requires-python = ">=3.12"`. Every dependency is pinned with `==` in `pyproject.toml`, and `uv.lock` is committed.
-- `mcp==2.3.0`, `azure-identity==1.26.0`. All other pins are resolved once in Task 1 and recorded in this file.
+- `mcp==2.3.0`, `azure-identity==1.26.0`. Resolved in Task 1: httpx==0.28.1, pydantic==2.14.1, python-dotenv==1.2.4; dev: pytest==9.1.1, anyio==4.15.1, respx==0.23.1, ruff==0.17.2, pyright==1.1.414; build: uv_build==0.11.19.
 - Sentinel `api-version=2025-09-01` (stable). Keep the existing Graph/ARM versions unless a task says otherwise.
 - Allowed hosts: `graph.microsoft.com`, `management.azure.com`, `api.loganalytics.io`. Nothing else ever receives a token.
 - Secrets: the certificate path and IDs come from `.env`/env. Never log, print or audit a token, password or certificate.
@@ -78,38 +78,38 @@ tests/ (one test file per module) + tests/security/
 ### Task 1: Project scaffold and settings
 **Files:** create `pyproject.toml`, `src/azsec_mcp/__init__.py`, `src/azsec_mcp/config.py`, `tests/test_config.py`, `tests/conftest.py`.
 **Produces:** `Settings` (frozen dataclass): `tenant_id: str`, `client_id: str`, `subscription_id: str`, `cert_path: Path`, `sentinel_rg: str`, `sentinel_workspace: str`, `max_tier: str`, `audit_path: Path`. Also `load_settings(env: Mapping[str, str] | None = None) -> Settings`.
-- [ ] Explain → approve.
-- [ ] `uv init --package`, add the deps, and pin the resolved versions with `==`. Record them in this plan under Global Constraints.
-- [ ] Tests:
+- [x] Explain → approve.
+- [x] `uv init --package`, add the deps, and pin the resolved versions with `==`. Record them in this plan under Global Constraints.
+- [x] Tests:
   - `test_missing_required_var_raises`: no `AZURE_TENANT_ID` → `ValueError` whose message names the variable.
   - `test_max_tier_defaults_to_read`.
   - `test_cert_path_defaults_to_repo_pem`: path ends in `cavalry-sp.combined.pem`.
   - `test_settings_repr_has_no_ids`: `repr()` hides the tenant/client/subscription values.
-- [ ] Run `uv run pytest tests/test_config.py -v` → FAIL, implement, → PASS. `uv run ruff check` and `uv run pyright` are clean.
-- [ ] Commit.
+- [x] Run `uv run pytest tests/test_config.py -v` → FAIL, implement, → PASS. `uv run ruff check` and `uv run pyright` are clean.
+- [x] Commit.
 
 ### Task 2: Validated ID types (fixes path and OData injection at the type level)
 **Files:** create `src/azsec_mcp/ids.py`, `tests/test_ids.py`.
 **Produces:** `Annotated[str, ...]` types: `Guid`, `ArmName` (`^[A-Za-z0-9._()-]{1,90}$`, not ending in `.`), `WatchlistAlias` (`^[A-Za-z0-9_-]{1,64}$`), `Upn` (an e-mail-shaped UPN, no `/ ? # %`), `IsoDuration` (`^P(T?\d+[DHMS])+$`), `RoleName` (`^[A-Za-z0-9 ._()-]{1,128}$`, no quotes). Also `seg(value: str) -> str`, which does `urllib.parse.quote(value, safe="")` and raises on `""`, `.` and `..`; and `odata_str(value: str) -> str`, which doubles single quotes.
-- [ ] Explain → approve.
-- [ ] Tests:
+- [x] Explain → approve.
+- [x] Tests:
   - `test_guid_accepts_canonical`.
   - `test_guid_rejects_traversal_variants`: each of `X/wipe?`, `..%2F..`, `%2e%2e`, `a／b`, `<guid>\n`, `<guid>/../x` fails validation.
   - `test_seg_encodes_slash_and_hash`: `seg("a/b#c") == "a%2Fb%23c"`.
   - `test_seg_rejects_dot_segments`.
   - `test_odata_str_escapes_quote`: `odata_str("o'brien") == "o''brien"`.
-- [ ] FAIL → implement → PASS → commit.
+- [x] FAIL → implement → PASS → commit.
 
 ### Task 3: Ordered tier policy
 **Files:** create `src/azsec_mcp/policy.py`, `tests/test_policy.py`.
 **Produces:** `class Tier(IntEnum): READ=1, WRITE=2, DESTRUCTIVE=3`; `@dataclass(frozen=True) Decision(allowed: bool, tier: Tier, reason: str)`; `authorize(tier: Tier, max_tier: Tier) -> Decision`; `parse_tier(s: str) -> Tier` (unknown → `ValueError`).
-- [ ] Explain → approve.
-- [ ] Tests:
+- [x] Explain → approve.
+- [x] Tests:
   - `test_read_ceiling_denies_write_and_destructive`.
   - `test_destructive_ceiling_allows_write`: the hierarchy holds, so the inverted `.env` state can't exist.
   - `test_parse_tier_rejects_unknown`.
   - `test_deny_reason_names_env_var`: the reason contains `MCP_MAX_TIER`.
-- [ ] FAIL → implement → PASS → commit.
+- [x] FAIL → implement → PASS → commit.
 
 ### Task 4: Hash-chained audit log
 **Files:** create `src/azsec_mcp/audit.py`, `tests/test_audit.py`.
@@ -216,6 +216,7 @@ Every tool task follows the same steps:
 ## Milestone 3: Cutover
 ### Task 13: Live read-only smoke test + Claude Code registration
 - [ ] Explain → approve. With the user's go-ahead, call `list_resource_groups`, `list_sentinel_incidents` and `get_secure_score` against Cavalry77 at `MCP_MAX_TIER=read`. Then check that `audit.log` verifies.
+- [ ] Explain → approve a Claude Code permission deny rule for `Edit`/`Write` on `~/dev/azure-mcp-server/.env` (blocks agent self-escalation via config, see Task 3). The user applies it.
 - [ ] Give the user the `claude mcp` command to re-point `azure-mcp-local` to `uv run --directory ~/dev/azure-mcp-server azsec-mcp` (the user runs it).
 - [ ] After the user confirms it works: `git rm server.js package.json package-lock.json scratch-fido2.mjs`; commit.
 ### Task 14: CI for Python
