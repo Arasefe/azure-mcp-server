@@ -22,7 +22,6 @@ A local **Model Context Protocol (MCP) stdio server** that exposes Azure and Mic
 11. [Integrating with Claude Code](#11-integrating-with-claude-code)
 12. [Testing the Server](#12-testing-the-server)
 13. [Troubleshooting](#13-troubleshooting)
-14. [Bulk User Provisioning](#14-bulk-user-provisioning)
 
 ---
 
@@ -91,9 +90,6 @@ npm install
 ```
 azure-mcp-server/
 ├── server.js                  # MCP stdio server — all 47 tools registered here
-├── mcp-client.js              # Thin client library used by chat.js
-├── chat.js                    # Interactive CLI for manual tool testing
-├── provision-users.js         # One-shot bulk user provisioning script (20 users)
 ├── .env                       # Environment variables (never commit this)
 ├── .gitignore                 # Must include .env and *.pem
 ├── cavalry-sp.combined.pem    # Service principal certificate (never commit)
@@ -195,8 +191,6 @@ SENTINEL_WORKSPACE_NAME="<log-analytics-workspace-name>"
 # MCP_ALLOW_WRITE="true"
 # MCP_ALLOW_DESTRUCTIVE="true"
 
-# Required only for provision-users.js (uses client secret auth instead of certificate)
-AZURE_CLIENT_SECRET="<your-client-secret>"
 ```
 
 ### 6.2 Find Sentinel workspace details
@@ -654,9 +648,13 @@ printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion
   | node server.js 2>/dev/null
 ```
 
-### Interactive CLI testing with chat.js
+### Interactive testing with MCP Inspector
 
-`chat.js` is a minimal readline CLI for manually invoking tools without Claude Code. It requires the server to be running. See `chat.js` for supported commands.
+To click through tools without Claude Code, launch the server under the MCP Inspector, which starts it over stdio:
+
+```bash
+npx @modelcontextprotocol/inspector node server.js
+```
 
 ---
 
@@ -673,51 +671,3 @@ printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion
 | MCP server not appearing in Claude Code  | Settings not reloaded                              | Run `/mcp` in Claude Code or restart it                                                  |
 | No response on stdio                     | `console.log` polluting stdout                     | Use `process.stderr.write()` for all logging — stdout is reserved for MCP JSON-RPC       |
 | `Authorization denied: "<tool>" is a write/destructive-tier tool` | Expected — tool tier isn't enabled | Set `MCP_ALLOW_WRITE` and/or `MCP_ALLOW_DESTRUCTIVE` to `"true"` in `.env` (see section 8) |
-
----
-
-## 14. Bulk User Provisioning
-
-`provision-users.js` is a standalone one-shot script that creates 20 pre-defined Entra ID test users in bulk. It is independent of the MCP server.
-
-### How it works
-
-- Authenticates using **client secret** (not certificate) via `AZURE_CLIENT_SECRET`
-- Calls `POST https://graph.microsoft.com/v1.0/users` directly for each user
-- Normalises names to email-safe format (strips accents, apostrophes, etc.)
-- All users are created under the `Cavalry77.onmicrosoft.com` domain with temporary password `Cavalry!2026` and `forceChangePasswordNextSignIn: true`
-
-### Before running
-
-1. Add `AZURE_CLIENT_SECRET` to your `.env` file
-2. Update the domain in `provision-users.js` if your tenant domain differs:
-   ```javascript
-   const upn = `${...}@Cavalry77.onmicrosoft.com`; // ← change this
-   ```
-3. Optionally update the default password to meet your tenant's password policy
-
-### Run
-
-```bash
-node provision-users.js
-```
-
-Expected output:
-
-```
-Acquiring token...
-Token acquired. Provisioning 20 users...
-
-[OK]   emma.richardson@Cavalry77.onmicrosoft.com — Created
-[OK]   marcus.chen@Cavalry77.onmicrosoft.com — Created
-...
-Done. 20 created, 0 failed.
-```
-
-### Required permissions
-
-| Permission           | Type              | Purpose               |
-| -------------------- | ----------------- | --------------------- |
-| `User.ReadWrite.All` | Graph Application | Create Entra ID users |
-
-> `provision-users.js` uses `AZURE_CLIENT_SECRET`. The main `server.js` uses certificate-based auth (`cavalry-sp.combined.pem`). The same app registration must have both a client secret and the certificate uploaded if you use both.
