@@ -1,5 +1,7 @@
 # azure-mcp-showcase — Implementation Plan
 
+> **Status 2026-10-25:** Tasks 0–17 done; validation in validation.md. Not done by design: deploying infra/ (outward), the reader/responder SP split (tenant change), git push and Claude Code re-registration (user steps).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:executing-plans (native, in-session).
 > The user requires an **Explain → Approve** step before any code is written in every task.
 > Subagent-driven execution is not used, because it would hide the code from the user.
