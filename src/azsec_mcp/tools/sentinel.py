@@ -38,8 +38,30 @@ WRITABLE = (
     "classificationReason",
     "classificationComment",
 )
-# workspace(), app(), resource(), adx(), arg() would reach beyond this server's workspace.
-CROSS_SCOPE = re.compile(r"\b(workspace|app|resource|adx|arg)\s*\(", re.IGNORECASE)
+# Functions/operators that reach beyond this server's workspace. This is a defense-in-depth
+# check, not a KQL parser: the authoritative control is giving the identity Log Analytics
+# Reader on this one workspace only (docs/PERMISSIONS.md).
+_SCOPE_NAMES = r"workspace|app|resource|adx|arg|cluster|database|externaldata|external_table"
+CROSS_SCOPE = re.compile(
+    rf"(?:\b(?:{_SCOPE_NAMES})|\[\s*['\"]\s*(?:{_SCOPE_NAMES})\s*['\"]\s*\])\s*\(",
+    re.IGNORECASE,
+)
+_LINE_COMMENT = re.compile(r"//[^\n]*")
+
+
+def cross_scope_reason(query: str) -> str | None:
+    """Name of the first cross-scope construct in `query`, else None.
+
+    Checked on the raw text and on the text with // comments removed, so neither a comment
+    between name and '(' nor a '//' inside a string literal can hide a call.
+    """
+    for candidate in (query, _LINE_COMMENT.sub(" ", query)):
+        found = CROSS_SCOPE.search(candidate)
+        if found:
+            return found.group(0)
+    return None
+
+
 _DURATION_PART = re.compile(r"(T?)([0-9]+)([DHMS])")
 _DAYS_PER_UNIT = {"D": 1.0, "H": 1 / 24, "S": 1 / 86_400}
 
@@ -339,13 +361,13 @@ def register(s: SecureServer) -> None:
     async def run_sentinel_kql_query(query: KqlText, timespan: IsoDuration = "P1D") -> list:
         """Run a read-only KQL query against this server's Sentinel workspace.
 
-        Limited to this workspace (workspace()/app()/resource()/adx()/arg() are refused),
+        Limited to this workspace (cross-workspace/cross-service functions are refused),
         a timespan of at most P90D, and 60 seconds of server time.
         """
-        if CROSS_SCOPE.search(query):
+        if cross_scope_reason(query):
             raise ToolError(
-                "Cross-workspace/cross-service functions (workspace, app, resource, adx, arg) "
-                "are not allowed"
+                "Cross-workspace/cross-service access (workspace, app, resource, adx, arg, "
+                "cluster, database, externaldata, external_table) is not allowed"
             )
         if duration_days(timespan) > MAX_KQL_DAYS:
             raise ToolError(f"timespan is capped at P{MAX_KQL_DAYS}D")

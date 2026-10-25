@@ -207,6 +207,13 @@ async def test_update_incident_etag_conflict_reported(server):
         'RESOURCE ("/subscriptions/x").AzureActivity',
         "adx('https://help.kusto.windows.net').StormEvents",
         "arg('').Resources",
+        'workspace // hide the call\n("other").SecurityEvent',
+        "['workspace'](\"other\").SecurityEvent",
+        'print "https://x"; workspace("other").SecurityEvent',
+        "cluster('help').database('Samples').StormEvents",
+        "database('other').SecurityEvent",
+        "externaldata (x:string) ['https://evil.example/a.csv']",
+        "external_table('t')",
     ],
 )
 @respx.mock(assert_all_called=False)
@@ -371,3 +378,8 @@ async def test_incident_alerts_and_entities_post(server):
         await c.call_tool("list_sentinel_incident_alerts", {"incident_id": INCIDENT})
         await c.call_tool("list_sentinel_incident_entities", {"incident_id": INCIDENT})
     assert alerts.call_count == 1 and entities.call_count == 1
+
+
+def test_cross_scope_check_has_no_false_negative_for_plain_queries():
+    assert sentinel.cross_scope_reason("SigninLogs | where AppDisplayName has 'workspace'") is None
+    assert sentinel.cross_scope_reason("SecurityEvent | summarize count() by Computer") is None
