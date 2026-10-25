@@ -99,3 +99,11 @@ def test_corrupt_tail_refuses_to_start(tmp_path):
     p.write_text("not json\n", encoding="utf-8")
     with pytest.raises(ValueError, match="corrupt"):
         AuditLog(p)
+
+
+def test_load_returns_records_split_on_newline_only(tmp_path):
+    p = tmp_path / "a.jsonl"
+    AuditLog(p).append({"tool": "t", "args": {"q": "a b"}})
+    ok, bad, records = AuditLog.load(p)
+    assert (ok, bad) == (True, None)
+    assert records[0]["args"]["q"] == "a b"

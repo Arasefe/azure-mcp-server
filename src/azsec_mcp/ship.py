@@ -117,12 +117,12 @@ class Shipper:
         problems: list[str] = []
         records: list[dict[str, Any]] = []
         if self._audit.exists():
-            ok, bad_line = AuditLog.verify(self._audit)
-            if not ok:
-                problems.append(f"chain broken at line {bad_line}")
+            # One parser for verify and shipping, so they can never disagree about records.
+            ok, bad_line, parsed = AuditLog.load(self._audit)
+            if ok:
+                records = parsed
             else:
-                lines = self._audit.read_text(encoding="utf-8").splitlines()
-                records = [json.loads(line) for line in lines]
+                problems.append(f"chain broken at line {bad_line}")
         head = (
             ShipState(records[-1]["seq"], records[-1]["hash"]) if records else ShipState(0, GENESIS)
         )

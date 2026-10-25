@@ -81,19 +81,34 @@ class AuditLog:
             return record["hash"]
 
     @staticmethod
+    def load(path: Path) -> tuple[bool, int | None, list[dict[str, Any]]]:
+        """Parse and verify the log: (ok, first bad line number, records).
+
+        The single parser for every reader (verify, azsec-mcp-ship). Lines are split on
+        "\n" only: records may contain U+2028/U+2029 and other characters that
+        str.splitlines() would treat as line breaks.
+        """
+        prev, seq = GENESIS, 1
+        records: list[dict[str, Any]] = []
+        lines = path.read_text(encoding="utf-8").split("\n")
+        if lines and lines[-1] == "":
+            lines.pop()
+        for lineno, line in enumerate(lines, start=1):
+            try:
+                record = json.loads(line)
+                claimed = record.pop("hash")
+            except (ValueError, KeyError, AttributeError):
+                return False, lineno, records
+            if record.get("prev") != prev or record.get("seq") != seq:
+                return False, lineno, records
+            if claimed != _digest(record):
+                return False, lineno, records
+            records.append({**record, "hash": claimed})
+            prev, seq = claimed, seq + 1
+        return True, None, records
+
+    @staticmethod
     def verify(path: Path) -> tuple[bool, int | None]:
         """Return (True, None) if the chain is intact, else (False, first bad line number)."""
-        prev, seq = GENESIS, 1
-        with path.open(encoding="utf-8") as f:
-            for lineno, line in enumerate(f, start=1):
-                try:
-                    record = json.loads(line)
-                    claimed = record.pop("hash")
-                except (ValueError, KeyError):
-                    return False, lineno
-                if record.get("prev") != prev or record.get("seq") != seq:
-                    return False, lineno
-                if claimed != _digest(record):
-                    return False, lineno
-                prev, seq = claimed, seq + 1
-        return True, None
+        ok, bad_line, _ = AuditLog.load(path)
+        return ok, bad_line

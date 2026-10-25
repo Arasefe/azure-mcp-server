@@ -152,3 +152,17 @@ async def test_failed_upload_does_not_advance_state(paths):
         with pytest.raises(RuntimeError, match="403"):
             await shipper(paths, c).run()
     assert load_state(paths[1]).seq == 0
+
+
+@respx.mock
+async def test_unicode_line_separators_in_args_do_not_break_shipping(paths):
+    log = AuditLog(paths[0])
+    for sep in (" ", " ", "\x1c", "\x85"):
+        log.append({"tool": "t", "decision": "allowed", "args": {"q": f"a{sep}b"}})
+    route = respx.post(URL).respond(204)
+    async with httpx.AsyncClient() as c:
+        result = await shipper(paths, c).run()
+    rows = sent_rows(route)
+    assert result["chainOk"] is True
+    assert [r["Seq"] for r in rows if r["Kind"] == "call"] == [1, 2, 3, 4]
+    assert rows[1]["Args"] == {"q": "a b"}
