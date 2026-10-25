@@ -135,8 +135,11 @@ async def test_headers_cannot_override_authorization():
 )
 @respx.mock
 async def test_error_handles_unusual_bodies(body):
-    kwargs = {"json": body} if not isinstance(body, str) else {"text": body}
-    respx.get(f"{GRAPH}/v1.0/x").respond(500, **kwargs)
+    route = respx.get(f"{GRAPH}/v1.0/x")
+    if isinstance(body, str):
+        route.respond(500, text=body)
+    else:
+        route.respond(500, json=body)
     async with httpx.AsyncClient() as c:
         with pytest.raises(AzureError) as exc:
             await AzureHttp(FakeCred(), c).request("GET", Api.GRAPH, "/v1.0/x")
