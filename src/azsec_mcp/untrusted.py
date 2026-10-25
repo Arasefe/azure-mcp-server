@@ -5,6 +5,7 @@ it is not a guarantee. The deterministic control is human confirmation (confirm.
 """
 
 import json
+from collections.abc import Callable
 from typing import Any
 
 MAX_CHARS = 40_000
@@ -26,6 +27,22 @@ def _envelope(source: str, data: Any, omitted: int = 0) -> dict[str, Any]:
     return env
 
 
+def _longest_fitting(n: int, build: Callable[[int], dict[str, Any]]) -> int:
+    """Largest k in [0, n] whose final encoding build(k) fits MAX_CHARS (binary search).
+
+    Measured on the final JSON because escaping expands characters such as '"' and
+    control characters, so any budget computed before encoding can be exceeded.
+    """
+    lo, hi = 0, n
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        if len(_dump(build(mid))) <= MAX_CHARS:
+            lo = mid
+        else:
+            hi = mid - 1
+    return lo
+
+
 def wrap(data: Any, source: str) -> str:
     """Return the JSON envelope for `data`, never longer than MAX_CHARS."""
     text = _dump(_envelope(source, data))
@@ -33,19 +50,16 @@ def wrap(data: Any, source: str) -> str:
         return text
 
     if isinstance(data, list):
-        # Binary search for the longest prefix of items that still fits.
-        lo, hi = 0, len(data)
-        while lo < hi:
-            mid = (lo + hi + 1) // 2
-            if len(_dump(_envelope(source, data[:mid], len(data) - mid))) <= MAX_CHARS:
-                lo = mid
-            else:
-                hi = mid - 1
-        return _dump(_envelope(source, data[:lo], len(data) - lo))
+        # Keep the longest prefix of items that still fits.
+        k = _longest_fitting(len(data), lambda k: _envelope(source, data[:k], len(data) - k))
+        return _dump(_envelope(source, data[:k], len(data) - k))
 
-    # Not a list: keep a string preview, leaving room for the envelope itself.
-    env = _envelope(source, None)
-    env["truncated"] = True
-    budget = MAX_CHARS - len(_dump(env)) - 64
-    env["data"] = _dump(data)[:budget]
-    return _dump(env)
+    # Not a list: keep the longest string preview that still fits.
+    preview = _dump(data)
+
+    def build(k: int) -> dict[str, Any]:
+        env = _envelope(source, preview[:k])
+        env["truncated"] = True
+        return env
+
+    return _dump(build(_longest_fitting(len(preview), build)))

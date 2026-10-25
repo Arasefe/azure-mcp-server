@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from azsec_mcp.untrusted import MAX_CHARS, NOTICE, wrap
 
 
@@ -34,6 +36,13 @@ def test_single_huge_item_still_bounded():
     raw = wrap(["z" * 100_000], "t")
     assert len(raw) <= MAX_CHARS
     assert json.loads(raw)["omitted_items"] == 1
+
+
+@pytest.mark.parametrize("ch", ['"', "\\", "\x01", "\n"])
+def test_cap_holds_against_escape_amplification(ch):
+    # JSON escaping expands these characters, so the cap must be measured on the final output.
+    for data in ({"blob": ch * 100_000}, [ch * 100_000]):
+        assert len(wrap(data, "t")) <= MAX_CHARS
 
 
 def test_attacker_text_cannot_forge_envelope_fields():
