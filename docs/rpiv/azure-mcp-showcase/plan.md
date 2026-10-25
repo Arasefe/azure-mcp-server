@@ -165,8 +165,8 @@ Record fields: `ts`, `seq`, `prev`, `hash` + the event, where `hash = sha256(can
   - It registers with `ToolAnnotations(read_only_hint=tier==READ, destructive_hint=tier==DESTRUCTIVE)`.
   - Denials and errors raise, so the client sees `is_error=True`.
 - `__main__.main()` runs the server over stdio. Verify the exact run call against the SDK docs in this task.
-- [ ] Explain → approve.
-- [ ] Tests, using an in-memory `Client(server)` and test-only tools `t_read`, `t_write`, `t_destroy(device_id: Guid)`:
+- [x] Explain → approve.
+- [x] Tests, using an in-memory `Client(server)` and test-only tools `t_read`, `t_write`, `t_destroy(device_id: Guid)`:
   - `test_read_tool_returns_envelope`.
   - `test_write_denied_under_read_ceiling_and_audited`.
   - `test_destructive_requires_retyped_target`: elicitation callback returns the wrong target → not executed (spy count 0), audit records `declined`.
@@ -174,7 +174,13 @@ Record fields: `ts`, `seq`, `prev`, `hash` + the event, where `hash = sha256(can
   - `test_destructive_denied_when_client_cannot_elicit`.
   - `test_invalid_guid_rejected_before_handler` (spy count 0).
   - `test_list_tools_carries_annotations`.
-- [ ] FAIL → implement → PASS → commit. **Gate I-M1:** show the full core test run.
+- [x] FAIL → implement → PASS → commit. **Gate I-M1:** show the full core test run.
+
+**Deviations (approved in Task 7):**
+- Confirmation uses an SDK **Resolver** (`Elicit[Confirm]` via `Resolve`) instead of `ctx.elicit()`. `ctx.elicit()` raises `NoBackChannelError` on 2026-07-28 connections; resolvers work on both protocol generations (tested in auto and legacy modes).
+- The tier check runs inside the resolver, so a human is never asked to confirm a call the policy forbids.
+- `build_server` returns `SecureServer` (`.mcp`, `.http`, `.settings`, `.tool(name, tier, target_arg=)`); domain modules expose `register(s: SecureServer)`.
+- The wrapper sets both `__signature__` and `__annotations__`: the SDK builds schemas from the first and finds resolvers through the second.
 
 ## Milestone 2: Port the tools (same names, same behavior, now validated)
 Every tool task follows the same steps:

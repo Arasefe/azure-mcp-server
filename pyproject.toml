@@ -12,6 +12,9 @@ dependencies = [
   "python-dotenv==1.2.4",
 ]
 
+[project.scripts]
+azsec-mcp = "azsec_mcp.__main__:main"
+
 [dependency-groups]
 dev = [
   "pytest==9.1.1",
@@ -37,6 +40,8 @@ select = ["E", "F", "I", "B", "UP", "S"]
 
 [tool.pyright]
 typeCheckingMode = "standard"
+venvPath = "."
+venv = ".venv"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
