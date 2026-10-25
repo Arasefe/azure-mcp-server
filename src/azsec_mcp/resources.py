@@ -59,6 +59,14 @@ CAPABILITY_GAPS: dict[str, dict[str, str]] = {
         "alternative": f"{_PURVIEW} > Compliance Manager > Improvement actions.",
         "docsUrl": "https://learn.microsoft.com/purview/compliance-manager",
     },
+    "list_sensitive_info_types": {
+        "reason": "No Graph endpoint lists sensitive information types: the JS server's "
+        "/beta/security/informationProtection/sensitiveTypes returned 400 (segment not found) "
+        "against Cavalry77 on 2026-10-24.",
+        "alternative": f"{_PURVIEW} > Data classification > Sensitive info types, or "
+        "Get-DlpSensitiveInformationType (Security & Compliance PowerShell).",
+        "docsUrl": "https://learn.microsoft.com/purview/sit-sensitive-information-type-learn-about",
+    },
     "list_label_policies": {
         "reason": "Sensitivity label policies have no app-only Graph API. The JS tool of this "
         "name only re-listed labels, which list_sensitivity_labels already does.",

@@ -29,11 +29,6 @@ def register(s: SecureServer) -> None:
         """Get one sensitivity label as published to a user (Graph beta)."""
         return await s.http.request("GET", Api.GRAPH, f"{labels_path(user)}/{seg(label_id)}")
 
-    @s.tool("list_sensitive_info_types", Tier.READ)
-    async def list_sensitive_info_types() -> list[dict[str, Any]]:
-        """List Purview sensitive information types (Graph beta)."""
-        return await list_all("/beta/security/informationProtection/sensitiveTypes")
-
     # ── Alerts ──────────────────────────────────────────────────────────────
 
     @s.tool("list_dlp_alerts", Tier.READ)

@@ -167,6 +167,12 @@ async def test_entra_logs_top_bounded_and_filter_passed(server, tool):
     assert route.call_count == 1
 
 
-async def test_server_exposes_65_tools(server):
+async def test_server_exposes_64_tools(server):
     async with Client(server().mcp) as c:
-        assert len((await c.list_tools()).tools) == 65
+        assert len((await c.list_tools()).tools) == 64
+
+
+def test_sensitive_info_types_is_a_documented_gap():
+    # Live test against Cavalry77: GET /beta/security/informationProtection/sensitiveTypes
+    # returned 400 "Resource not found for the segment 'sensitiveTypes'".
+    assert "list_sensitive_info_types" in CAPABILITY_GAPS
