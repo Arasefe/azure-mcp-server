@@ -5,3 +5,10 @@ node_modules/
 .DS_Store
 .claude/
 audit.log
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+audit.jsonl
+audit.jsonl.shipped
+audit.jsonl.shipped.tmp
