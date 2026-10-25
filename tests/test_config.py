@@ -25,6 +25,11 @@ def test_cert_path_defaults_to_repo_pem():
     assert load_settings(BASE).cert_path.name == "cavalry-sp.combined.pem"
 
 
+def test_audit_path_defaults_to_jsonl():
+    # Separate from the JS server's unchained audit.log so verify() never sees mixed formats.
+    assert load_settings(BASE).audit_path.name == "audit.jsonl"
+
+
 def test_settings_repr_has_no_ids():
     text = repr(load_settings(BASE))
     for name in ("AZURE_TENANT_ID", "AZURE_CLIENT_ID", "AZURE_SUBSCRIPTION_ID"):

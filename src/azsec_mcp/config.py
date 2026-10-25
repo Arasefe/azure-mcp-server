@@ -56,5 +56,5 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
             env.get("AZURE_CLIENT_CERTIFICATE_PATH", REPO_ROOT / "cavalry-sp.combined.pem")
         ),
         max_tier=env.get("MCP_MAX_TIER", "read"),
-        audit_path=Path(env.get("MCP_AUDIT_PATH", REPO_ROOT / "audit.log")),
+        audit_path=Path(env.get("MCP_AUDIT_PATH", REPO_ROOT / "audit.jsonl")),
     )

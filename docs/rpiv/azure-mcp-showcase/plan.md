@@ -77,7 +77,7 @@ tests/ (one test file per module) + tests/security/
 
 ### Task 1: Project scaffold and settings
 **Files:** create `pyproject.toml`, `src/azsec_mcp/__init__.py`, `src/azsec_mcp/config.py`, `tests/test_config.py`, `tests/conftest.py`.
-**Produces:** `Settings` (frozen dataclass): `tenant_id: str`, `client_id: str`, `subscription_id: str`, `cert_path: Path`, `sentinel_rg: str`, `sentinel_workspace: str`, `max_tier: str`, `audit_path: Path`. Also `load_settings(env: Mapping[str, str] | None = None) -> Settings`.
+**Produces:** `Settings` (frozen dataclass): `tenant_id: str`, `client_id: str`, `subscription_id: str`, `cert_path: Path`, `sentinel_rg: str`, `sentinel_workspace: str`, `max_tier: str`, `audit_path: Path` (default `audit.jsonl`, changed in Task 4). Also `load_settings(env: Mapping[str, str] | None = None) -> Settings`.
 - [x] Explain → approve.
 - [x] `uv init --package`, add the deps, and pin the resolved versions with `==`. Record them in this plan under Global Constraints.
 - [x] Tests:
@@ -114,16 +114,16 @@ tests/ (one test file per module) + tests/security/
 ### Task 4: Hash-chained audit log
 **Files:** create `src/azsec_mcp/audit.py`, `tests/test_audit.py`.
 **Produces:** `class AuditLog(path: Path)` with `append(event: dict) -> str` (returns the record hash; synchronous write + `fsync` under a `threading.Lock`), `@staticmethod verify(path: Path) -> tuple[bool, int | None]` (ok, first bad line number), and `redact(obj) -> obj`. `redact` works recursively: any key whose lowercase name contains `password`, `secret`, `token`, `key` or `assertion` gets `"[redacted]"`.
-Record fields: `ts`, `seq`, `prev`, `hash` + the event, where `hash = sha256(prev + canonical_json(record_without_hash))` and canonical JSON is `json.dumps(sort_keys=True, separators=(",",":"))`. The genesis `prev` is 64 zeros. On start, the log resumes from the last line's hash.
-- [ ] Explain → approve.
-- [ ] Tests:
+Record fields: `ts`, `seq`, `prev`, `hash` + the event, where `hash = sha256(canonical_json(record_without_hash))` (the record already contains `prev`); event keys named seq/ts/prev/hash are dropped and canonical JSON is `json.dumps(sort_keys=True, separators=(",",":"))`. The genesis `prev` is 64 zeros. On start, the log resumes from the last line's hash.
+- [x] Explain → approve.
+- [x] Tests:
   - `test_chain_verifies`.
   - `test_edit_detected_at_line`: change one character on line 2 → `(False, 2)`.
   - `test_deleted_line_detected`.
   - `test_resume_continues_chain`: a new `AuditLog` on an existing file → `verify` still ok.
   - `test_redact_nested_password_and_token`.
   - `test_concurrent_appends_keep_chain_valid`: 50 threads → verify ok, `seq` runs 1..50.
-- [ ] FAIL → implement → PASS → commit.
+- [x] FAIL → implement → PASS → commit.
 
 ### Task 5: Untrusted-output envelope
 **Files:** create `src/azsec_mcp/untrusted.py`, `tests/test_untrusted.py`.
