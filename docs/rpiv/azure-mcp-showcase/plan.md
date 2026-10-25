@@ -236,6 +236,13 @@ Every tool task follows the same steps:
 - Fix the mapping bugs: watchlist `itemsCount`, connector `state`.
 - `run_sentinel_kql_query` stays READ, with its result capped by the envelope.
 - Tests: `test_incident_alerts_post_cannot_traverse`, `test_update_incident_rejects_unknown_status`.
+- [x] Done (the user switched to autonomous mode here and approved the recommendations: C4 block cross-scope functions, D TI via KQL on ThreatIntelIndicators).
+  - API 2025-09-01. The incident PUT sends only writable fields plus the etag (a concurrent edit gets 412). Closing requires a classification. Enums are Literals. `update_sentinel_incident` is DESTRUCTIVE; the prompt shows #number, title and current status.
+  - KQL: results become row dicts, `Prefer: wait=60`, timespan ≤ P90D, workspace()/app()/resource()/adx()/arg() are refused, and the workspace customerId is cached. `AzureHttp.request(headers=)` can't override Authorization.
+  - TI: fixed KQL on `ThreatIntelIndicators` (the legacy table stopped July 31 2025). Incidents: top 1–200, newest first, projected.
+  - Fixed JS mappings: watchlist searchKey (not itemsCount), connector dataTypes (not state). Comments use uuid4 ids, ≤4000 chars.
+  - Mutation-checked: the close rule, cross-scope block, writable filter and timespan cap.
+  - TO VERIFY LIVE (Task 13): whether `metadata kind HuntingQuery` returns Cavalry77's hunting queries.
 
 ### Task 12: `tools/purview.py` + `tools/entra_logs.py` + `resources.py`
 - Real tools: sensitivity labels, SITs, label policies (×4), insider risk alerts, eDiscovery (×6, `caseId`: `Guid`), `list_retention_event_types` (application permission supported per Microsoft Learn), `get_dspm_insights`, `list_audit_logs`, `list_signin_logs` (`top`: `Field(ge=1, le=200)`).

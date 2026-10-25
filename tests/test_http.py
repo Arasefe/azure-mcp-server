@@ -113,3 +113,18 @@ async def test_no_content_returns_empty():
     respx.post(f"{GRAPH}/v1.0/x").respond(204)
     async with httpx.AsyncClient() as c:
         assert await AzureHttp(FakeCred(), c).request("POST", Api.GRAPH, "/v1.0/x") == {}
+
+
+@respx.mock
+async def test_headers_cannot_override_authorization():
+    route = respx.post(f"{GRAPH}/v1/q").respond(json={})
+    async with httpx.AsyncClient() as c:
+        await AzureHttp(FakeCred(), c).request(
+            "POST",
+            Api.GRAPH,
+            "/v1/q",
+            headers={"Prefer": "wait=60", "Authorization": "Bearer attacker", "authorization": "x"},
+        )
+    sent = route.calls.last.request.headers
+    assert sent["Prefer"] == "wait=60"
+    assert sent["Authorization"] == f"Bearer tok:{GRAPH_SCOPE}"

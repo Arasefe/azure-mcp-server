@@ -70,11 +70,15 @@ class AzureHttp:
         *,
         params: dict[str, Any] | None = None,
         json: Any = None,
+        headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Call `api` at a relative `path` built from seg() parts."""
         if not path.startswith("/") or "://" in path:
             raise ValueError("path must be relative and built from seg() parts")
-        return await self._send(method, api, api.value + path, params=params, json=json)
+        extra = {k: v for k, v in (headers or {}).items() if k.lower() != "authorization"}
+        return await self._send(
+            method, api, api.value + path, params=params, json=json, extra_headers=extra
+        )
 
     async def paginate(
         self, api: Api, path: str, *, params: dict[str, Any] | None = None, max_items: int = 500
@@ -91,14 +95,21 @@ class AzureHttp:
                 return items
             page = await self._send("GET", api, next_link)
 
-    async def _send(self, method: str, api: Api, url: str, **kwargs: Any) -> dict[str, Any]:
+    async def _send(
+        self,
+        method: str,
+        api: Api,
+        url: str,
+        extra_headers: dict[str, str] | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
         if not _is_api_url(url, api):
             host = urlsplit(url).hostname
             raise AzureError(0, "ForeignHost", f"Refused to send a token to {host}")
         token = await to_thread.run_sync(self._credential.get_token, api.scope)
-        resp = await self._client.request(
-            method, url, headers={"Authorization": f"Bearer {token.token}"}, **kwargs
-        )
+        # The token header is set last so no caller-supplied header can replace it.
+        headers = {**(extra_headers or {}), "Authorization": f"Bearer {token.token}"}
+        resp = await self._client.request(method, url, headers=headers, **kwargs)
         if resp.status_code >= 400:
             raise _error(resp)
         return resp.json() if resp.content else {}
