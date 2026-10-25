@@ -249,6 +249,11 @@ Every tool task follows the same steps:
 - The 10 stubs are deleted and their notes move into the `azsec://capability-gaps` resource, with doc URLs.
 - Tests: `test_capability_gaps_resource_lists_retention_labels_delegated_only`, `test_signin_top_bounded`.
 - **Gate I-M2:** a tool parity check: every `TOOL_TIERS` name in `server.js` is either registered or listed in capability-gaps (`tests/test_parity.py`, which reads the names from a frozen list).
+- [x] Done. 14 Purview/eDiscovery/Entra-log tools plus the `azsec://capability-gaps` resource (11 gaps). **Gate I-M2 passed**: all 75 JS names are registered or listed as gaps, with no overlap (65 tools).
+  - Fixed JS bugs: `list_ediscovery_holds` used noncustodialDataSources (now legalHolds); the `list_dlp_alerts` stub was wrong, since v1.0 alerts_v2 supports `serviceSource eq 'dataLossPrevention'` (now a real tool); `list_label_policies` and `get_dspm_insights` were fake and re-listed labels (now documented gaps).
+  - Sensitivity labels use the documented beta `/users/{user}/security/informationProtection/sensitivityLabels` path (a `user` arg is now required).
+  - TO VERIFY LIVE (Task 13): `/beta/security/informationProtection/sensitiveTypes`, and beta alerts_v2 `serviceSource eq 'microsoftInsiderRiskManagement'` (that value isn't in the v1.0 enum).
+  - Also: KQL cross-scope check hardened after a security review (cluster/database/externaldata/external_table, bracketed names, comment-split calls), commit c978064.
 
 ## Milestone 3: Cutover
 ### Task 13: Live read-only smoke test + Claude Code registration
