@@ -218,6 +218,8 @@ async def test_update_incident_etag_conflict_reported(server):
         "print @'c:\\//', workspace // c\n('other').SecurityEvent",
         "print 'it\\'s //', workspace // c\n('other').SecurityEvent",
         "print ```//\nmulti```, workspace // c\n('other').SecurityEvent",
+        "print ~~~//\nmulti~~~, workspace // c\n('other').SecurityEvent",
+        'print \'unterminated\nworkspace // c\n("other").SecurityEvent',
     ],
 )
 @respx.mock(assert_all_called=False)
