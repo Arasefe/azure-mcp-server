@@ -197,6 +197,15 @@ Every tool task follows the same steps:
 - `create_user.password` is audited as `[redacted]`.
 - Fix the `list_users` description (it says "via Azure CLI").
 - Tests: `test_assign_role_rejects_foreign_scope`, `test_role_filter_escapes_quote`, `test_assign_au_role_is_destructive`.
+- [x] Done. Approved decisions (Task 8):
+  1. `assign_role` is limited to the server's own subscription (`RbacScope` + runtime check).
+  2. Privileged administrator roles (Microsoft's action-based definition, wildcards included) become PIM **eligible**, time-bound assignments (`roleEligibilityScheduleRequests`, `AdminAssign`, `AfterDuration`, api 2020-10-01) with a required justification and no per-user exceptions; other roles stay active, with the justification as the description.
+  3. `assign_au_role` uses the unified `roleManagement/directory/roleAssignments` API (no `directoryRoles` activation).
+  4. `create_user` takes no password; it generates a random one that is never returned or audited. Onboard with a TAP.
+  5. A `ToolError` raised by a tool passes through and is audited as `refused`.
+  6. Azure error messages reach the model inside the untrusted envelope.
+  7. Added READ tool `list_role_eligibilities` (`roleEligibilityScheduleInstances`, `$filter=atScope()`).
+  - Argument names are snake_case (tool names unchanged). Resource groups use REST api 2025-04-01.
 
 ### Task 9: `tools/intune.py` (16 tools)
 - `deviceId`/`appId`: `Guid`. `retire`/`wipe` are DESTRUCTIVE with `target_arg="device_id"`.

@@ -63,9 +63,15 @@ class SecureServer:
                         raise ToolError(f"Not executed: {why}")
                 try:
                     result = await fn(**kwargs)
+                except ToolError as exc:
+                    # A deliberate refusal written by this server: trusted text, passed through.
+                    self._record(name, tier, "allowed", kwargs, outcome="refused", reason=str(exc))
+                    raise
                 except AzureError as exc:
+                    # Azure error text can echo attacker-set values, so it is enveloped too.
                     self._record(name, tier, "allowed", kwargs, outcome="error", error=str(exc))
-                    raise ToolError(str(exc)) from exc
+                    error = {"status": exc.status, "code": exc.code, "message": exc.message}
+                    raise ToolError(wrap(error, name)) from exc
                 except Exception as exc:
                     detail = f"{type(exc).__name__}: {exc}"[:500]
                     self._record(name, tier, "allowed", kwargs, outcome="error", error=detail)

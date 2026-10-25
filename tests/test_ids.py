@@ -1,7 +1,17 @@
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
-from azsec_mcp.ids import ArmName, Guid, IsoDuration, Upn, odata_str, seg
+from azsec_mcp.ids import (
+    ArmName,
+    AzureRegion,
+    Guid,
+    IsoDuration,
+    RbacScope,
+    Upn,
+    is_guid,
+    odata_str,
+    seg,
+)
 
 G = "0f8fad5b-d9cb-469f-a165-70867728950e"
 
@@ -60,3 +70,28 @@ def test_seg_rejects_dot_segments(v):
 
 def test_odata_str_escapes_quote():
     assert odata_str("o'brien") == "o''brien"
+
+
+def test_rbac_scope_rules():
+    ok(RbacScope, f"/subscriptions/{G}")
+    ok(RbacScope, f"/subscriptions/{G}/resourceGroups/rg-sentinel")
+    ok(RbacScope, f"/subscriptions/{G}/resourcegroups/rg-sentinel")
+    for v in (
+        f"/subscriptions/{G}/../x",
+        f"/subscriptions/{G}/resourceGroups/rg/providers/x",
+        "/providers/Microsoft.Management/managementGroups/root",
+        f"/subscriptions/{G}/",
+    ):
+        bad(RbacScope, v)
+
+
+def test_azure_region():
+    ok(AzureRegion, "eastus")
+    bad(AzureRegion, "East US")
+    bad(AzureRegion, "eastus/x")
+
+
+def test_is_guid():
+    assert is_guid(G)
+    assert not is_guid(G + "\n")
+    assert not is_guid("emma@cavalry77.onmicrosoft.com")

@@ -5,19 +5,33 @@ types. Patterns are allowlists: they describe a good value, so an unknown
 trick (encoded slash, full-width slash, trailing newline) simply fails.
 """
 
+import re
 from typing import Annotated
 from urllib.parse import quote
 
 from pydantic import StringConstraints
 
 _HEX = "[0-9a-fA-F]"
-_GUID_PATTERN = rf"^{_HEX}{{8}}-{_HEX}{{4}}-{_HEX}{{4}}-{_HEX}{{4}}-{_HEX}{{12}}$"
+_GUID_BODY = rf"{_HEX}{{8}}-{_HEX}{{4}}-{_HEX}{{4}}-{_HEX}{{4}}-{_HEX}{{12}}"
+_ARM_NAME_BODY = r"[A-Za-z0-9._()-]{0,89}[A-Za-z0-9_()-]"
+_GUID_RE = re.compile(_GUID_BODY)
 
-Guid = Annotated[str, StringConstraints(pattern=_GUID_PATTERN)]
+Guid = Annotated[str, StringConstraints(pattern=rf"^{_GUID_BODY}$")]
 """Object / device / incident / case IDs."""
 
-ArmName = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9._()-]{0,89}[A-Za-z0-9_()-]$")]
+ArmName = Annotated[str, StringConstraints(pattern=rf"^{_ARM_NAME_BODY}$")]
 """Resource group or alert name: ARM's character set, 1-90 chars, not ending in '.'."""
+
+RbacScope = Annotated[
+    str,
+    StringConstraints(
+        pattern=rf"^/subscriptions/{_GUID_BODY}(/(?i:resourcegroups)/{_ARM_NAME_BODY})?$"
+    ),
+]
+"""Azure RBAC scope: a subscription or one resource group in it, nothing else."""
+
+AzureRegion = Annotated[str, StringConstraints(pattern=r"^[a-z0-9]{2,40}$")]
+"""Region short name such as eastus or westeurope."""
 
 WatchlistAlias = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_-]{1,64}$")]
 
@@ -34,6 +48,11 @@ IsoDuration = Annotated[str, StringConstraints(pattern=r"^P(T?[0-9]{1,4}[DHMS]){
 
 RoleName = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9 ._()-]{1,128}$")]
 """Azure RBAC role display name, e.g. 'Key Vault Secrets User'. No quotes possible."""
+
+
+def is_guid(value: str) -> bool:
+    """True if `value` is exactly a GUID (fullmatch: no leading/trailing extras, no newline)."""
+    return _GUID_RE.fullmatch(value) is not None
 
 
 def seg(value: str) -> str:

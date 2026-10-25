@@ -1,5 +1,6 @@
 import json
 
+import httpx
 import pytest
 
 from azsec_mcp.audit import AuditLog
@@ -24,6 +25,12 @@ def anyio_backend():
 
 
 @pytest.fixture
+async def http_client():
+    async with httpx.AsyncClient() as client:
+        yield client
+
+
+@pytest.fixture
 def audit_records(tmp_path):
     """Return a function that reads the test server's audit log as a list of dicts."""
 
@@ -38,12 +45,12 @@ def audit_records(tmp_path):
 
 @pytest.fixture
 def make_server(tmp_path):
-    """Factory: a SecureServer with no HTTP client and an audit log in tmp_path."""
+    """Factory: a SecureServer (optionally with an AzureHttp) and an audit log in tmp_path."""
 
-    def factory(max_tier="read"):
+    def factory(max_tier="read", http=None):
         path = tmp_path / "audit.jsonl"
         env = {**BASE_ENV, "MCP_MAX_TIER": max_tier, "MCP_AUDIT_PATH": str(path)}
-        return build_server(load_settings(env), None, AuditLog(path))  # type: ignore[arg-type]
+        return build_server(load_settings(env), http, AuditLog(path))  # type: ignore[arg-type]
 
     return factory
 
