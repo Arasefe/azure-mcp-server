@@ -215,7 +215,13 @@ def register(s: SecureServer) -> None:
         "update_sentinel_incident",
         Tier.DESTRUCTIVE,
         retype=("incident_id",),
-        show=("status", "severity", "classification", "classification_reason"),
+        show=(
+            "status",
+            "severity",
+            "classification",
+            "classification_reason",
+            "classification_comment",
+        ),
         describe=describe_incident,
     )
     async def update_sentinel_incident(

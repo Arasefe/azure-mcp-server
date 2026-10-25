@@ -179,32 +179,36 @@ async def test_assign_role_rejects_foreign_subscription(server, respx_mock, audi
     assert audit_records()[-1]["outcome"] == "refused"
 
 
-async def test_assign_role_rejects_scope_traversal(server):
-    async with Client(server().mcp, elicitation_callback=answer(UPN)) as c:
-        result = await c.call_tool(
-            "assign_role",
-            {
-                "assignee": UPN,
-                "role": "Reader",
-                "scope": f"{SCOPE}/../x",
-                "justification": JUSTIFICATION,
-            },
-        )
+@respx.mock(assert_all_called=False)
+async def test_assign_role_rejects_scope_traversal(server, respx_mock, audit_records):
+    # Correct retype text, so only the RbacScope validator can make this call fail.
+    anything = respx_mock.route().respond(json={})
+    asked: list[str] = []
+    callback = answer(f"Reader -> {UPN}", asked=asked)
+    args = {
+        "assignee": UPN,
+        "role": "Reader",
+        "scope": f"{SCOPE}/../x",
+        "justification": JUSTIFICATION,
+    }
+    async with Client(server().mcp, elicitation_callback=callback) as c:
+        result = await c.call_tool("assign_role", args)
     assert result.is_error is True
+    assert anything.call_count == 0 and asked == []
+    assert all(r["decision"] != "declined" for r in audit_records())
 
 
-async def test_role_name_with_quote_rejected(server):
-    async with Client(server().mcp, elicitation_callback=answer(UPN)) as c:
-        result = await c.call_tool(
-            "assign_role",
-            {
-                "assignee": UPN,
-                "role": "Reader' or 1 eq 1",
-                "scope": SCOPE,
-                "justification": JUSTIFICATION,
-            },
-        )
+@respx.mock(assert_all_called=False)
+async def test_role_name_with_quote_rejected(server, respx_mock):
+    anything = respx_mock.route().respond(json={})
+    role = "Reader' or 1 eq 1"
+    asked: list[str] = []
+    callback = answer(f"{role} -> {UPN}", asked=asked)
+    args = {"assignee": UPN, "role": role, "scope": SCOPE, "justification": JUSTIFICATION}
+    async with Client(server().mcp, elicitation_callback=callback) as c:
+        result = await c.call_tool("assign_role", args)
     assert result.is_error is True
+    assert anything.call_count == 0 and asked == []
 
 
 @pytest.mark.parametrize(
@@ -259,13 +263,31 @@ async def test_non_privileged_role_stays_active(server):
 
 
 @pytest.mark.parametrize("justification", [None, "too short"])
-async def test_justification_required_and_bounded(server, justification):
+@respx.mock(assert_all_called=False)
+async def test_justification_required_and_bounded(server, respx_mock, justification):
+    anything = respx_mock.route().respond(json={})
     args = {"assignee": UPN, "role": "Reader", "scope": SCOPE}
     if justification is not None:
         args["justification"] = justification
-    async with Client(server().mcp, elicitation_callback=answer(UPN)) as c:
+    asked: list[str] = []
+    callback = answer(f"Reader -> {UPN}", asked=asked)
+    async with Client(server().mcp, elicitation_callback=callback) as c:
         result = await c.call_tool("assign_role", args)
     assert result.is_error is True
+    assert anything.call_count == 0 and asked == []
+
+
+@respx.mock
+async def test_prompt_shows_justification(server):
+    mock_user_lookup()
+    mock_role_by_name(OWNER)
+    put_eligibility()
+    asked: list[str] = []
+    callback = answer(f"Owner -> {UPN}", asked=asked)
+    args = {"assignee": UPN, "role": "Owner", "scope": SCOPE, "justification": JUSTIFICATION}
+    async with Client(server().mcp, elicitation_callback=callback) as c:
+        await c.call_tool("assign_role", args)
+    assert f"justification: {JUSTIFICATION}" in asked[0]
 
 
 @respx.mock

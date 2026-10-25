@@ -128,3 +128,16 @@ async def test_headers_cannot_override_authorization():
     sent = route.calls.last.request.headers
     assert sent["Prefer"] == "wait=60"
     assert sent["Authorization"] == f"Bearer tok:{GRAPH_SCOPE}"
+
+
+@pytest.mark.parametrize(
+    "body", [["not", "a", "dict"], {"error": "just a string"}, {"error": None}, "plain text"]
+)
+@respx.mock
+async def test_error_handles_unusual_bodies(body):
+    kwargs = {"json": body} if not isinstance(body, str) else {"text": body}
+    respx.get(f"{GRAPH}/v1.0/x").respond(500, **kwargs)
+    async with httpx.AsyncClient() as c:
+        with pytest.raises(AzureError) as exc:
+            await AzureHttp(FakeCred(), c).request("GET", Api.GRAPH, "/v1.0/x")
+    assert exc.value.status == 500

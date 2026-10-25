@@ -49,11 +49,16 @@ def _is_api_url(url: str, api: Api) -> bool:
 
 
 def _error(resp: httpx.Response) -> AzureError:
+    """Status, code and trimmed message from any error body shape (never raises)."""
     try:
-        err = resp.json().get("error", {})
-        code, message = str(err.get("code", "Unknown")), str(err.get("message", ""))
+        body = resp.json()
     except ValueError:
-        code, message = "Unknown", resp.text
+        return AzureError(resp.status_code, "Unknown", resp.text[:_MAX_ERROR])
+    err = body.get("error") if isinstance(body, dict) else None
+    if isinstance(err, dict):
+        code, message = str(err.get("code", "Unknown")), str(err.get("message", ""))
+    else:
+        code, message = "Unknown", str(err if err is not None else body)
     return AzureError(resp.status_code, code, message[:_MAX_ERROR])
 
 

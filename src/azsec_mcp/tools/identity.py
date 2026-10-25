@@ -147,7 +147,7 @@ def register(s: SecureServer) -> None:
         "assign_role",
         Tier.DESTRUCTIVE,
         retype=("role", "assignee"),
-        show=("scope", "eligibility_days"),
+        show=("scope", "eligibility_days", "justification"),
     )
     async def assign_role(
         assignee: UserRef,
@@ -335,7 +335,7 @@ def register(s: SecureServer) -> None:
         "assign_au_role",
         Tier.DESTRUCTIVE,
         retype=("user",),
-        show=("au_id", "role_template_id", "eligibility_days"),
+        show=("au_id", "role_template_id", "eligibility_days", "justification"),
         describe=describe_au_role,
     )
     async def assign_au_role(
