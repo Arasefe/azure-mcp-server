@@ -391,4 +391,5 @@ def test_cross_scope_check_has_no_false_negative_for_plain_queries():
 
 def test_strip_comments_keeps_strings_and_removes_real_comments():
     q = "print \"a//b\", @'x//y' // real comment\n| take 1"
-    assert sentinel.strip_comments(q) == "print \"a//b\", @'x//y' \n| take 1"
+    # The space before // is kept and the comment itself becomes one space.
+    assert sentinel.strip_comments(q) == "print \"a//b\", @'x//y'  \n| take 1"
