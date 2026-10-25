@@ -25,7 +25,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Syntax check
-        run: for f in *.js *.mjs; do node --check "$f"; done
+        run: git ls-files '*.js' '*.mjs' | xargs -n1 node --check
 
   # Fail on a known HIGH/CRITICAL vulnerability in the dependency tree
   dependency-scan:
