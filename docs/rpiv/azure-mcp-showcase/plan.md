@@ -220,6 +220,9 @@ Every tool task follows the same steps:
 ### Task 9: `tools/intune.py` (16 tools)
 - `deviceId`/`appId`: `Guid`. `retire`/`wipe` are DESTRUCTIVE with `target_arg="device_id"`.
 - Test: `test_reboot_cannot_reach_wipe` (the research.md finding #1 payload is rejected).
+- [x] Done. Approved: A) retire and wipe are DESTRUCTIVE; the prompt identifies the physical device (name, OS, user, serial via `describe`) and the device ID is retyped. B) wipe exposes only keep_user_data and keep_enrollment_data; macOsUnlockCode is deliberately not accepted because it's a secret. C) reboot and sync stay WRITE. D) get_intune_device `$select`s security-relevant fields only (no IMEI, phone number, MAC or carrier).
+  - Fixed JS bugs: `list_intune_apps` selected the nonexistent `appAvailability` (now `publishingState`), and 4 lists now paginate.
+  - Mutation-checked: with Guid and seg() removed, `test_reboot_cannot_reach_wipe` fails (the request is sent).
 
 ### Task 10: `tools/defender.py` (4 tools)
 - `alertName`: `ArmName`, `resourceGroup`: `ArmName`, `status`: `Literal["Dismissed","Resolved","Active"]`.
