@@ -226,6 +226,8 @@ Every tool task follows the same steps:
 
 ### Task 10: `tools/defender.py` (4 tools)
 - `alertName`: `ArmName`, `resourceGroup`: `ArmName`, `status`: `Literal["Dismissed","Resolved","Active"]`.
+- [x] Done. Approved: A) `update_defender_alert` uses the documented POST actions (`/dismiss` `/resolve` `/activate` `/inProgress` under `locations/{ascLocation}`, api 2022-01-01) instead of the JS server's undocumented PATCH. B) it's DESTRUCTIVE, because closing alerts is defense evasion (T1562). The alert name is retyped; the prompt shows status, RG, location, and the looked-up title and severity. C) alerts and recommendations are projected; alerts carry the parsed resourceGroup and location. Assessments api 2025-05-04.
+  - Process note: tests and code were written in the same step (not test-first). Covered afterwards by 4 mutation checks: PATCH, a WRITE downgrade, a wrong action mapping and a missing location parse are all caught.
 
 ### Task 11: `tools/sentinel.py` (17 tools)
 - `api-version=2025-09-01`. `incidentId`: `Guid`, `watchlistAlias`: `WatchlistAlias`, `timespan`: `IsoDuration`.
