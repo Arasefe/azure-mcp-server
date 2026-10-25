@@ -214,6 +214,9 @@ Every tool task follows the same steps:
   - `add_au_member` becomes DESTRUCTIVE, with the AU name shown and the user retyped.
   - Notes for the threat model: resolver lookups may run once per protocol round; httpx logs URLs (no tokens) to stderr.
 
+- [x] Follow-up fix (security review, approved): directory-supplied names in confirmation prompts go through `confirm.directory_text()`. Control, format (bidi, zero-width) and line-separator characters are removed, the text is capped at 80 chars, quoted and labeled `(name from directory)`.
+  - Threat-model note (Task 16): shown-but-not-retyped arguments are still bound to the answer. On 2026-07-28 connections the SDK pins each recorded answer to a SHA-256 digest of the exact rendered question (`mcp/server/mcpserver/resolve.py` `_request_digest`, `_restore_outcome`), and every shown argument is in that text. On older connections the question is asked inside the single call. Residual risk: a malicious client, which is out of scope because the client's user answers the prompt.
+
 ### Task 9: `tools/intune.py` (16 tools)
 - `deviceId`/`appId`: `Guid`. `retire`/`wipe` are DESTRUCTIVE with `target_arg="device_id"`.
 - Test: `test_reboot_cannot_reach_wipe` (the research.md finding #1 payload is rejected).

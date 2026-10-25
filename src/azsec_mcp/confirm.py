@@ -11,6 +11,7 @@ A client that cannot elicit fails the call before the tool body runs.
 
 import inspect
 import re
+import unicodedata
 from collections.abc import Awaitable, Callable
 from typing import Annotated, Any
 
@@ -18,6 +19,25 @@ from mcp.server.mcpserver import AcceptedElicitation, Elicit, ElicitationResult,
 from pydantic import BaseModel, Field
 
 Describe = Callable[[dict[str, Any]], Awaitable[dict[str, str]]]
+
+MAX_DIRECTORY_TEXT = 80
+
+
+def directory_text(value: str) -> str:
+    """Render a directory-supplied name safely for the human-approval prompt.
+
+    Names such as a device or AU display name can be set by people other than the
+    operator, so they are treated as untrusted: control, format (incl. bidi overrides
+    and zero-width) and line/paragraph separator characters become spaces, the text is
+    capped, quoted, and labelled so it cannot pose as a line of the prompt itself.
+    """
+    cleaned = "".join(
+        " " if unicodedata.category(ch) in ("Cc", "Cf", "Zl", "Zp") else ch for ch in value
+    )
+    cleaned = " ".join(cleaned.split()).replace('"', "'")
+    if len(cleaned) > MAX_DIRECTORY_TEXT:
+        cleaned = cleaned[: MAX_DIRECTORY_TEXT - 1] + "…"
+    return f'"{cleaned}" (name from directory)'
 
 
 class Confirm(BaseModel):
@@ -52,9 +72,9 @@ def confirmation_param(
         if describe is not None:
             try:
                 extra = await describe(kwargs)
+                lines += [f"{label}: {directory_text(value)}" for label, value in extra.items()]
             except Exception:
-                extra = {"details": "(name lookup failed; check the IDs above)"}
-            lines += [f"{label}: {value}" for label, value in extra.items()]
+                lines.append("details: (name lookup failed; check the IDs above)")
         lines.append(f"Retype exactly to confirm: {expected_text(kwargs, retype)}")
         return Elicit("\n".join(lines), Confirm)
 
